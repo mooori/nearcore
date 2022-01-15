@@ -226,7 +226,7 @@ impl Actor for PeerManagerActor {
                     let pending_incoming_connections_counter =
                         act.pending_incoming_connections_counter.clone();
                     let peer_counter = act.peer_counter.clone();
-                    let max_num_peers: usize = act.config.max_num_peers as usize;
+                    let max_num_peers = act.config.max_num_peers;
 
                     ctx.add_message_stream(incoming.filter_map(move |conn| {
                         if let Ok(conn) = conn {
@@ -942,14 +942,14 @@ impl PeerManagerActor {
         let potential_outgoing_connections =
             self.num_connected_outgoing_peers() + self.outgoing_peers.len();
 
-        (total_connections < self.config.ideal_connections_lo as usize
-            || (total_connections < self.config.max_num_peers as usize
-                && potential_outgoing_connections < self.config.minimum_outbound_peers as usize))
+        (total_connections < self.config.ideal_connections_lo
+            || (total_connections < self.config.max_num_peers
+                && potential_outgoing_connections < self.config.minimum_outbound_peers))
             && !self.config.outbound_disabled
     }
 
     fn is_inbound_allowed(&self) -> bool {
-        self.connected_peers.len() + self.outgoing_peers.len() < self.config.max_num_peers as usize
+        self.connected_peers.len() + self.outgoing_peers.len() < self.config.max_num_peers
     }
 
     /// Returns single random peer with close to the highest height
@@ -1167,7 +1167,7 @@ impl PeerManagerActor {
         let mut safe_set = HashSet::new();
 
         if self.num_connected_outgoing_peers() + self.outgoing_peers.len()
-            <= self.config.minimum_outbound_peers as usize
+            <= self.config.minimum_outbound_peers
         {
             for (peer, active) in self.connected_peers.iter() {
                 if active.peer_type == PeerType::Outbound {
@@ -1177,8 +1177,7 @@ impl PeerManagerActor {
         }
 
         if self.config.archive
-            && self.num_archival_peers()
-                <= self.config.archival_peer_connections_lower_bound as usize
+            && self.num_archival_peers() <= self.config.archival_peer_connections_lower_bound
         {
             for (peer, active) in self.connected_peers.iter() {
                 if active.full_peer_info.chain_info.archival {
@@ -1209,7 +1208,7 @@ impl PeerManagerActor {
         // Take remaining peers
         for (peer_id, _) in recent_connections
             .into_iter()
-            .take((self.config.safe_set_size as usize).saturating_sub(safe_set.len()))
+            .take((self.config.safe_set_size).saturating_sub(safe_set.len()))
         {
             safe_set.insert(peer_id.clone());
         }
@@ -1300,7 +1299,7 @@ impl PeerManagerActor {
         }
 
         // If there are too many active connections try to remove some connections
-        if self.connected_peers.len() > self.config.ideal_connections_hi as usize {
+        if self.connected_peers.len() > self.config.ideal_connections_hi {
             self.try_stop_active_connection();
         }
 
@@ -2014,7 +2013,7 @@ impl PeerManagerActor {
             self.adv_helper.adv_disable_edge_pruning = disable_edge_pruning;
         }
         if let Some(set_max_peers) = msg.set_max_peers {
-            self.config.max_num_peers = set_max_peers as u32;
+            self.config.max_num_peers = set_max_peers;
         }
     }
 
@@ -2232,9 +2231,7 @@ impl PeerManagerActor {
     ) -> PeerRequestResult {
         #[cfg(feature = "delay_detector")]
         let _d = delay_detector::DelayDetector::new("peers request".into());
-        PeerRequestResult {
-            peers: self.peer_store.healthy_peers(self.config.max_send_peers as usize),
-        }
+        PeerRequestResult { peers: self.peer_store.healthy_peers(self.config.max_send_peers) }
     }
 
     fn handle_msg_peers_response(&mut self, msg: PeersResponse, _ctx: &mut Context<Self>) {

@@ -329,7 +329,7 @@ pub mod test_features {
         store: Arc<Store>,
         mut config: NetworkConfig,
         boot_nodes: Vec<(&str, u16)>,
-        peer_max_count: u32,
+        peer_max_count: usize,
         routing_table_addr: Addr<RoutingTableActor>,
     ) -> (PeerManagerActor, PeerId, Arc<AtomicUsize>) {
         config.boot_nodes = convert_boot_nodes(boot_nodes);
@@ -430,7 +430,7 @@ pub struct SetAdvOptions {
     pub disable_edge_signature_verification: Option<bool>,
     pub disable_edge_propagation: Option<bool>,
     pub disable_edge_pruning: Option<bool>,
-    pub set_max_peers: Option<u64>,
+    pub set_max_peers: Option<usize>,
 }
 
 #[cfg(feature = "test_features")]
