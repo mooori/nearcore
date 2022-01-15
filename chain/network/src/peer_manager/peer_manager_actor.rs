@@ -1208,7 +1208,7 @@ impl PeerManagerActor {
         // Take remaining peers
         for (peer_id, _) in recent_connections
             .into_iter()
-            .take((self.config.safe_set_size).saturating_sub(safe_set.len()))
+            .take(self.config.safe_set_size.saturating_sub(safe_set.len()))
         {
             safe_set.insert(peer_id.clone());
         }
