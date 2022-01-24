@@ -39,7 +39,7 @@ near-chunks = { path = "../chunks" }
 near-telemetry = { path = "../telemetry" }
 near-performance-metrics = { path = "../../utils/near-performance-metrics" }
 near-performance-metrics-macros = { path = "../../utils/near-performance-metrics-macros" }
-delay-detector = { path = "../../tools/delay_detector", optional = true }
+delay-detector = { path = "../../tools/delay_detector" }
 near-network-primitives = { path = "../network-primitives" }
 
 [dev-dependencies]
@@ -51,7 +51,7 @@ near-actix-test-utils = { path = "../../test-utils/actix-test-utils" }
 byzantine_asserts = ["near-chain/byzantine_asserts"]
 expensive_tests = []
 test_features = ["near-network/test_features", "near-chain/test_features"]
-delay_detector = ["near-chain/delay_detector", "near-network/delay_detector", "delay-detector"]
+delay_detector = ["near-chain/delay_detector", "near-network/delay_detector", "delay-detector/delay_detector"]
 protocol_feature_chunk_only_producers = ["near-primitives/protocol_feature_chunk_only_producers", "near-chain/protocol_feature_chunk_only_producers"]
 protocol_feature_routing_exchange_algorithm = ["near-network/protocol_feature_routing_exchange_algorithm", "near-chain/protocol_feature_routing_exchange_algorithm", "near-primitives/protocol_feature_routing_exchange_algorithm"]
 nightly_protocol = []

@@ -1011,8 +1011,7 @@ impl Handler<SendMessage> for PeerActor {
 
     #[perf]
     fn handle(&mut self, msg: SendMessage, _: &mut Self::Context) {
-        #[cfg(feature = "delay_detector")]
-        let _d = delay_detector::DelayDetector::new("send message".into());
+        let _d = delay_detector::DelayDetector::new(|| "send message".into());
         self.send_message(&msg.message);
     }
 }
@@ -1022,8 +1021,7 @@ impl Handler<Arc<SendMessage>> for PeerActor {
 
     #[perf]
     fn handle(&mut self, msg: Arc<SendMessage>, _: &mut Self::Context) {
-        #[cfg(feature = "delay_detector")]
-        let _d = delay_detector::DelayDetector::new("send message".into());
+        let _d = delay_detector::DelayDetector::new(|| "send message".into());
         self.send_message(&msg.as_ref().message);
     }
 }
@@ -1033,8 +1031,7 @@ impl Handler<QueryPeerStats> for PeerActor {
 
     #[perf]
     fn handle(&mut self, _msg: QueryPeerStats, _: &mut Self::Context) -> Self::Result {
-        #[cfg(feature = "delay_detector")]
-        let _d = delay_detector::DelayDetector::new("query peer stats".into());
+        let _d = delay_detector::DelayDetector::new(|| "query peer stats".into());
 
         // TODO(#5218) Refactor this code to use `SystemTime`
         let now = Instant::now();
@@ -1062,9 +1059,8 @@ impl Handler<PeerManagerRequest> for PeerActor {
 
     #[perf]
     fn handle(&mut self, msg: PeerManagerRequest, ctx: &mut Self::Context) -> Self::Result {
-        #[cfg(feature = "delay_detector")]
         let _d =
-            delay_detector::DelayDetector::new(format!("peer manager request {:?}", msg).into());
+            delay_detector::DelayDetector::new(|| format!("peer manager request {:?}", msg).into());
         match msg {
             PeerManagerRequest::BanPeer(ban_reason) => {
                 self.ban_peer(ctx, ban_reason);
