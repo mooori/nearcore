@@ -24,6 +24,8 @@ tracing.workspace = true
 wasmparser.workspace = true
 wasmtime = { workspace = true, optional = true }
 
+corosensei = "0.1.3"
+
 near-cache = { path = "../../utils/near-cache" }
 near-vm-logic = { path = "../near-vm-logic", default-features = false }
 near-vm-errors = { path = "../near-vm-errors" }

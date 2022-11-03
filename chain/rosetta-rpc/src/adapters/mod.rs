@@ -378,6 +378,9 @@ impl From<NearActions> for Vec<crate::models::Operation> {
                     );
                 }
 
+                // TODO: rosetta RPC for new action
+                near_primitives::transaction::Action::DeploySubmodule(_) => todo!(),
+
                 near_primitives::transaction::Action::FunctionCall(action) => {
                     let attached_amount = crate::models::Amount::from_yoctonear(action.deposit);
 

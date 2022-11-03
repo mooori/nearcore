@@ -12,7 +12,8 @@ pub use near_primitives::num_rational::Rational32;
 pub use near_primitives::runtime::config::RuntimeConfig;
 use near_primitives::runtime::fees::{transfer_exec_fee, transfer_send_fee, RuntimeFeesConfig};
 use near_primitives::transaction::{
-    Action, AddKeyAction, DeployContractAction, FunctionCallAction, Transaction,
+    Action, AddKeyAction, DeployContractAction, DeploySubmoduleAction, FunctionCallAction,
+    Transaction,
 };
 use near_primitives::types::{AccountId, Balance, Gas};
 use near_primitives::version::{is_implicit_account_creation_enabled, ProtocolVersion};
@@ -84,6 +85,13 @@ pub fn total_send_fees(
                 config.fee(ActionCosts::create_account).send_fee(sender_is_receiver)
             }
             DeployContract(DeployContractAction { code }) => {
+                let num_bytes = code.len() as u64;
+                config.fee(ActionCosts::deploy_contract_base).send_fee(sender_is_receiver)
+                    + config.fee(ActionCosts::deploy_contract_byte).send_fee(sender_is_receiver)
+                        * num_bytes
+            }
+            DeploySubmodule(DeploySubmoduleAction { code, .. }) => {
+                // TODO: Take `key` into account in cost?
                 let num_bytes = code.len() as u64;
                 config.fee(ActionCosts::deploy_contract_base).send_fee(sender_is_receiver)
                     + config.fee(ActionCosts::deploy_contract_byte).send_fee(sender_is_receiver)
@@ -189,6 +197,12 @@ pub fn exec_fee(
     match action {
         CreateAccount(_) => config.fee(ActionCosts::create_account).exec_fee(),
         DeployContract(DeployContractAction { code }) => {
+            let num_bytes = code.len() as u64;
+            config.fee(ActionCosts::deploy_contract_base).exec_fee()
+                + config.fee(ActionCosts::deploy_contract_byte).exec_fee() * num_bytes
+        }
+        DeploySubmodule(DeploySubmoduleAction { code, .. }) => {
+            // TODO: take `key` into account in cost?
             let num_bytes = code.len() as u64;
             config.fee(ActionCosts::deploy_contract_base).exec_fee()
                 + config.fee(ActionCosts::deploy_contract_byte).exec_fee() * num_bytes

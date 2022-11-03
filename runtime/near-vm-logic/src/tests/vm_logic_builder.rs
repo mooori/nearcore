@@ -13,6 +13,8 @@ pub(super) struct VMLogicBuilder {
     pub fees_config: RuntimeFeesConfig,
     pub promise_results: Vec<PromiseResult>,
     pub memory: MockedMemory,
+    // TODO: better mock implementation
+    pub submodule_factory: crate::NoopSubmoduleVMFactory,
     pub current_protocol_version: ProtocolVersion,
     pub context: VMContext,
 }
@@ -25,6 +27,7 @@ impl Default for VMLogicBuilder {
             ext: MockedExternal::default(),
             memory: MockedMemory::default(),
             promise_results: vec![],
+            submodule_factory: crate::NoopSubmoduleVMFactory,
             current_protocol_version: LATEST_PROTOCOL_VERSION,
             context: get_context(),
         }
@@ -48,6 +51,7 @@ impl VMLogicBuilder {
             &self.fees_config,
             &self.promise_results,
             &mut self.memory,
+            &self.submodule_factory,
             self.current_protocol_version,
         ))
     }
@@ -59,6 +63,7 @@ impl VMLogicBuilder {
             ext: MockedExternal::default(),
             memory: MockedMemory::default(),
             promise_results: vec![],
+            submodule_factory: crate::NoopSubmoduleVMFactory,
             current_protocol_version: LATEST_PROTOCOL_VERSION,
             context: get_context(),
         }

@@ -75,6 +75,7 @@ pub enum Action {
     DeleteKey(DeleteKeyAction),
     DeleteAccount(DeleteAccountAction),
     Delegate(SignedDelegateAction),
+    DeploySubmodule(DeploySubmoduleAction),
 }
 
 impl Action {
@@ -132,6 +133,34 @@ impl fmt::Debug for DeployContractAction {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("DeployContractAction")
             .field("code", &format_args!("{}", pretty::AbbrBytes(&self.code)))
+            .finish()
+    }
+}
+
+/// Deploy contract action
+#[derive(
+    BorshSerialize, BorshDeserialize, serde::Serialize, serde::Deserialize, PartialEq, Eq, Clone,
+)]
+pub struct DeploySubmoduleAction {
+    /// WebAssembly binary
+    #[serde(with = "base64_format")]
+    pub code: Vec<u8>,
+    /// Index for this submodule (allows adding multiple submodules per account).
+    #[serde(with = "base64_format")]
+    pub key: Vec<u8>,
+}
+
+impl From<DeploySubmoduleAction> for Action {
+    fn from(deploy_contract_action: DeploySubmoduleAction) -> Self {
+        Self::DeploySubmodule(deploy_contract_action)
+    }
+}
+
+impl fmt::Debug for DeploySubmoduleAction {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("DeploySubmoduleAction")
+            .field("code", &format_args!("{}", pretty::AbbrBytes(&self.code)))
+            .field("key", &format_args!("{:?}", &self.key))
             .finish()
     }
 }

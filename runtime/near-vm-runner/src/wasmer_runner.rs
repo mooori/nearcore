@@ -387,6 +387,7 @@ impl crate::runner::VM for Wasmer0VM {
         // Note that we don't clone the actual backing memory, just increase the RC.
         let memory_copy = memory.clone();
 
+        let submodule_factory = near_vm_logic::NoopSubmoduleVMFactory;
         let mut logic = VMLogic::new_with_protocol_version(
             ext,
             context,
@@ -394,6 +395,7 @@ impl crate::runner::VM for Wasmer0VM {
             fees_config,
             promise_results,
             &mut memory,
+            &submodule_factory,
             current_protocol_version,
         );
 

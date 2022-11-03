@@ -355,6 +355,16 @@ impl Runtime {
                     apply_state.current_protocol_version,
                 )?;
             }
+            Action::DeploySubmodule(deploy_submodule) => {
+                action_deploy_submodule(
+                    state_update,
+                    account.as_mut().expect(EXPECT_ACCOUNT_EXISTS),
+                    account_id,
+                    deploy_submodule,
+                    apply_state,
+                    apply_state.current_protocol_version,
+                )?;
+            }
             Action::FunctionCall(function_call) => {
                 action_function_call(
                     state_update,

@@ -12,10 +12,7 @@ use near_primitives::{
         RuntimeError,
     },
     receipt::{ActionReceipt, DataReceipt, Receipt, ReceiptEnum},
-    transaction::{
-        Action, AddKeyAction, DeployContractAction, FunctionCallAction, SignedTransaction,
-        StakeAction,
-    },
+    transaction::{Action, AddKeyAction, FunctionCallAction, SignedTransaction, StakeAction},
     types::{AccountId, Balance},
     version::ProtocolVersion,
 };
@@ -397,7 +394,8 @@ pub fn validate_action(
 ) -> Result<(), ActionsValidationError> {
     match action {
         Action::CreateAccount(_) => Ok(()),
-        Action::DeployContract(a) => validate_deploy_contract_action(limit_config, a),
+        Action::DeployContract(a) => validate_deploy_contract_action(limit_config, &a.code),
+        Action::DeploySubmodule(a) => validate_deploy_contract_action(limit_config, &a.code),
         Action::FunctionCall(a) => validate_function_call_action(limit_config, a),
         Action::Transfer(_) => Ok(()),
         Action::Stake(a) => validate_stake_action(a),
@@ -421,11 +419,11 @@ fn validate_delegate_action(
 /// Validates `DeployContractAction`. Checks that the given contract size doesn't exceed the limit.
 fn validate_deploy_contract_action(
     limit_config: &VMLimitConfig,
-    action: &DeployContractAction,
+    code: &[u8],
 ) -> Result<(), ActionsValidationError> {
-    if action.code.len() as u64 > limit_config.max_contract_size {
+    if code.len() as u64 > limit_config.max_contract_size {
         return Err(ActionsValidationError::ContractSizeExceeded {
-            size: action.code.len() as u64,
+            size: code.len() as u64,
             limit: limit_config.max_contract_size,
         });
     }
@@ -552,7 +550,8 @@ mod tests {
     use near_primitives::hash::{hash, CryptoHash};
     use near_primitives::test_utils::account_new;
     use near_primitives::transaction::{
-        CreateAccountAction, DeleteAccountAction, DeleteKeyAction, StakeAction, TransferAction,
+        CreateAccountAction, DeleteAccountAction, DeleteKeyAction, DeployContractAction,
+        StakeAction, TransferAction,
     };
     use near_primitives::types::{AccountId, Balance, MerkleHash, StateChangeCause};
     use near_primitives::version::PROTOCOL_VERSION;

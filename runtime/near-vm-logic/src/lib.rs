@@ -15,7 +15,10 @@ mod utils;
 mod vmstate;
 
 pub use context::VMContext;
-pub use dependencies::{External, MemSlice, MemoryLike, StorageGetMode, ValuePtr};
+pub use dependencies::{
+    External, MemSlice, MemoryLike, NoopSubmoduleVM, NoopSubmoduleVMFactory, StorageGetMode,
+    SubmoduleExecutionError, SubmoduleExecutionResult, SubmoduleVM, SubmoduleVMFactory, ValuePtr,
+};
 pub use logic::{VMLogic, VMOutcome};
 pub use near_primitives_core::config::*;
 pub use near_primitives_core::profile;

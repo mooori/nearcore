@@ -1,7 +1,9 @@
 //! External dependencies of the near-vm-logic.
 
-use near_primitives::hash::CryptoHash;
+use near_primitives::config::VMConfig;
 use near_primitives::types::TrieNodesCount;
+use near_primitives::version::ProtocolVersion;
+use near_primitives::{contract::ContractCode, hash::CryptoHash};
 use near_primitives_core::types::{AccountId, Balance};
 use near_vm_errors::VMLogicError;
 
@@ -32,6 +34,77 @@ impl MemSlice {
         let end = self.end()?;
         let start = T::try_from(self.ptr).map_err(|_| ())?;
         Ok(start..end)
+    }
+}
+
+/// Dependency injection for the vm-logic to be able to create new runtimes for submodules.
+pub trait SubmoduleVMFactory {
+    fn create(
+        &self,
+        code: ContractCode,
+        gas_limit: u64,
+        config: &VMConfig,
+        context: &crate::VMContext,
+        protocol_version: ProtocolVersion,
+    ) -> Result<Box<dyn SubmoduleVM>>;
+}
+
+pub struct NoopSubmoduleVMFactory;
+
+impl SubmoduleVMFactory for NoopSubmoduleVMFactory {
+    fn create(
+        &self,
+        _code: ContractCode,
+        _gas_limit: u64,
+        _config: &VMConfig,
+        _context: &crate::VMContext,
+        _protocol_version: ProtocolVersion,
+    ) -> Result<Box<dyn SubmoduleVM>> {
+        Ok(Box::new(NoopSubmoduleVM))
+    }
+}
+
+/// An abstraction for running "Submodules" (see TODO documentation).
+pub trait SubmoduleVM {
+    fn start(&mut self) -> SubmoduleExecutionResult;
+    fn resume(&mut self, response: Vec<u8>) -> SubmoduleExecutionResult;
+}
+
+pub struct NoopSubmoduleVM;
+
+impl SubmoduleVM for NoopSubmoduleVM {
+    fn start(&mut self) -> SubmoduleExecutionResult {
+        SubmoduleExecutionResult::Success(Vec::new())
+    }
+
+    fn resume(&mut self, _response: Vec<u8>) -> SubmoduleExecutionResult {
+        SubmoduleExecutionResult::Success(Vec::new())
+    }
+}
+
+pub enum SubmoduleExecutionResult {
+    Success(Vec<u8>),
+    Callback(Vec<u8>),
+    Error(SubmoduleExecutionError),
+}
+
+pub enum SubmoduleExecutionError {
+    AlreadyStarted,
+    NotFound,
+    MissingMainFn,
+    OutOfGas,
+    NotStarted,
+}
+
+impl SubmoduleExecutionError {
+    pub fn status_code(&self) -> u64 {
+        match self {
+            Self::AlreadyStarted => 100,
+            Self::NotFound => 200,
+            Self::MissingMainFn => 300,
+            Self::OutOfGas => 400,
+            Self::NotStarted => 500,
+        }
     }
 }
 

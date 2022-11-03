@@ -25,9 +25,9 @@ use crate::sharding::{
 };
 use crate::transaction::{
     Action, AddKeyAction, CreateAccountAction, DeleteAccountAction, DeleteKeyAction,
-    DeployContractAction, ExecutionMetadata, ExecutionOutcome, ExecutionOutcomeWithIdAndProof,
-    ExecutionStatus, FunctionCallAction, PartialExecutionOutcome, PartialExecutionStatus,
-    SignedTransaction, StakeAction, TransferAction,
+    DeployContractAction, DeploySubmoduleAction, ExecutionMetadata, ExecutionOutcome,
+    ExecutionOutcomeWithIdAndProof, ExecutionStatus, FunctionCallAction, PartialExecutionOutcome,
+    PartialExecutionStatus, SignedTransaction, StakeAction, TransferAction,
 };
 use crate::types::{
     AccountId, AccountWithPublicKey, Balance, BlockHeight, CompiledContractCache, EpochHeight,
@@ -1140,6 +1140,12 @@ pub enum ActionView {
         delegate_action: DelegateAction,
         signature: Signature,
     },
+    DeploySubmodule {
+        #[serde(with = "base64_format")]
+        code: Vec<u8>,
+        #[serde(with = "base64_format")]
+        key: Vec<u8>,
+    },
 }
 
 impl From<Action> for ActionView {
@@ -1149,6 +1155,10 @@ impl From<Action> for ActionView {
             Action::DeployContract(action) => {
                 let code = hash(&action.code).as_ref().to_vec();
                 ActionView::DeployContract { code }
+            }
+            Action::DeploySubmodule(action) => {
+                let code = hash(&action.code).as_ref().to_vec();
+                ActionView::DeploySubmodule { code, key: action.key }
             }
             Action::FunctionCall(action) => ActionView::FunctionCall {
                 method_name: action.method_name,
@@ -1184,6 +1194,9 @@ impl TryFrom<ActionView> for Action {
             ActionView::CreateAccount => Action::CreateAccount(CreateAccountAction {}),
             ActionView::DeployContract { code } => {
                 Action::DeployContract(DeployContractAction { code })
+            }
+            ActionView::DeploySubmodule { code, key } => {
+                Action::DeploySubmodule(DeploySubmoduleAction { code, key })
             }
             ActionView::FunctionCall { method_name, args, gas, deposit } => {
                 Action::FunctionCall(FunctionCallAction { method_name, args, gas, deposit })

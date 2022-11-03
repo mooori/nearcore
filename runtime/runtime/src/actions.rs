@@ -18,7 +18,7 @@ use near_primitives::runtime::config::AccountCreationConfig;
 use near_primitives::runtime::fees::RuntimeFeesConfig;
 use near_primitives::transaction::{
     Action, AddKeyAction, DeleteAccountAction, DeleteKeyAction, DeployContractAction,
-    FunctionCallAction, StakeAction, TransferAction,
+    DeploySubmoduleAction, FunctionCallAction, StakeAction, TransferAction,
 };
 use near_primitives::types::validator_stake::ValidatorStake;
 use near_primitives::types::{AccountId, BlockHeight, EpochInfoProvider, Gas, TrieCacheMode};
@@ -28,8 +28,8 @@ use near_primitives::version::{
     DELETE_KEY_STORAGE_USAGE_PROTOCOL_VERSION,
 };
 use near_store::{
-    get_access_key, get_code, remove_access_key, remove_account, set_access_key, set_code,
-    StorageError, TrieUpdate,
+    get_access_key, get_code, get_submodule_code, remove_access_key, remove_account,
+    set_access_key, set_code, set_submodule_code, StorageError, TrieUpdate,
 };
 use near_vm_errors::{
     CompilationError, FunctionCallError, FunctionCallErrorSer, InconsistentStateError,
@@ -495,6 +495,46 @@ pub(crate) fn action_deploy_contract(
     Ok(())
 }
 
+pub(crate) fn action_deploy_submodule(
+    state_update: &mut TrieUpdate,
+    account: &mut Account,
+    account_id: &AccountId,
+    deploy_submodule: &DeploySubmoduleAction,
+    apply_state: &ApplyState,
+    current_protocol_version: ProtocolVersion,
+) -> Result<(), StorageError> {
+    let _span = tracing::debug_span!(target: "runtime", "action_deploy_submodule").entered();
+    let code = ContractCode::new(deploy_submodule.code.clone(), None);
+    let prev_code = get_submodule_code(
+        state_update,
+        account_id,
+        &deploy_submodule.key,
+        Some(account.code_hash()),
+    )?;
+    let prev_code_length = prev_code.map(|code| code.code().len() as u64).unwrap_or_default();
+    account.set_storage_usage(account.storage_usage().saturating_sub(prev_code_length));
+    account.set_storage_usage(
+        account.storage_usage().checked_add(code.code().len() as u64).ok_or_else(|| {
+            StorageError::StorageInconsistentState(format!(
+                "Storage usage integer overflow for account {}",
+                account_id
+            ))
+        })?,
+    );
+    set_submodule_code(state_update, account_id.clone(), deploy_submodule.key.clone(), &code);
+    // Precompile the contract and store result (compiled code or error) in the database.
+    // Note, that contract compilation costs are already accounted in deploy cost using
+    // special logic in estimator (see get_runtime_config() function).
+    precompile_contract(
+        &code,
+        &apply_state.config.wasm_config,
+        current_protocol_version,
+        apply_state.cache.as_deref(),
+    )
+    .ok();
+    Ok(())
+}
+
 pub(crate) fn action_delete_account(
     state_update: &mut TrieUpdate,
     account: &mut Option<Account>,
@@ -838,7 +878,11 @@ pub(crate) fn check_actor_permissions(
     account_id: &AccountId,
 ) -> Result<(), ActionError> {
     match action {
-        Action::DeployContract(_) | Action::Stake(_) | Action::AddKey(_) | Action::DeleteKey(_) => {
+        Action::DeployContract(_)
+        | Action::DeploySubmodule(_)
+        | Action::Stake(_)
+        | Action::AddKey(_)
+        | Action::DeleteKey(_) => {
             if actor_id != account_id {
                 return Err(ActionErrorKind::ActorNoPermission {
                     account_id: account_id.clone(),
@@ -927,6 +971,7 @@ pub(crate) fn check_account_existence(
             }
         }
         Action::DeployContract(_)
+        | Action::DeploySubmodule(_)
         | Action::FunctionCall(_)
         | Action::Stake(_)
         | Action::AddKey(_)

@@ -12,9 +12,12 @@ use near_stable_hasher::StableHasher;
 use near_vm_errors::{
     CacheError, CompilationError, FunctionCallError, MethodResolveError, VMRunnerError, WasmTrap,
 };
-use near_vm_logic::gas_counter::FastGasCounter;
+use near_vm_logic::gas_counter::{FastGasCounter, GasCounter};
 use near_vm_logic::types::{PromiseResult, ProtocolVersion};
-use near_vm_logic::{External, MemSlice, MemoryLike, VMConfig, VMContext, VMLogic, VMOutcome};
+use near_vm_logic::{
+    External, MemSlice, MemoryLike, SubmoduleExecutionError, SubmoduleExecutionResult, VMConfig,
+    VMContext, VMLogic, VMOutcome,
+};
 use std::borrow::Cow;
 use std::hash::{Hash, Hasher};
 use std::mem::size_of;
@@ -585,6 +588,60 @@ impl wasmer_vm::Tunables for &Wasmer2VM {
     }
 }
 
+struct TunablesWrapper(VMConfig);
+
+impl wasmer_vm::Tunables for TunablesWrapper {
+    fn memory_style(&self, memory: &MemoryType) -> MemoryStyle {
+        MemoryStyle::Static {
+            bound: memory.maximum.unwrap_or(Pages(self.0.limit_config.max_memory_pages)),
+            offset_guard_size: WASM_PAGE_SIZE as u64,
+        }
+    }
+
+    fn table_style(&self, _table: &wasmer_types::TableType) -> wasmer_vm::TableStyle {
+        wasmer_vm::TableStyle::CallerChecksSignature
+    }
+
+    fn create_host_memory(
+        &self,
+        ty: &MemoryType,
+        _style: &MemoryStyle,
+    ) -> Result<std::sync::Arc<dyn Memory>, wasmer_vm::MemoryError> {
+        // We do not support arbitrary Host memories. The only memory contracts may use is the
+        // memory imported via `env.memory`.
+        Err(wasmer_vm::MemoryError::CouldNotGrow { current: Pages(0), attempted_delta: ty.minimum })
+    }
+
+    unsafe fn create_vm_memory(
+        &self,
+        ty: &MemoryType,
+        _style: &MemoryStyle,
+        _vm_definition_location: std::ptr::NonNull<wasmer_vm::VMMemoryDefinition>,
+    ) -> Result<std::sync::Arc<dyn Memory>, wasmer_vm::MemoryError> {
+        // We do not support VM memories. The only memory contracts may use is the memory imported
+        // via `env.memory`.
+        Err(wasmer_vm::MemoryError::CouldNotGrow { current: Pages(0), attempted_delta: ty.minimum })
+    }
+
+    fn create_host_table(
+        &self,
+        _ty: &wasmer_types::TableType,
+        _style: &wasmer_vm::TableStyle,
+    ) -> Result<std::sync::Arc<dyn wasmer_vm::Table>, String> {
+        panic!("should never be called")
+    }
+
+    unsafe fn create_vm_table(
+        &self,
+        ty: &wasmer_types::TableType,
+        style: &wasmer_vm::TableStyle,
+        vm_definition_location: std::ptr::NonNull<wasmer_vm::VMTableDefinition>,
+    ) -> Result<std::sync::Arc<dyn wasmer_vm::Table>, String> {
+        // This is called when instantiating a module.
+        Ok(Arc::new(LinearTable::from_definition(&ty, &style, vm_definition_location)?))
+    }
+}
+
 impl crate::runner::VM for Wasmer2VM {
     fn run(
         &self,
@@ -603,6 +660,8 @@ impl crate::runner::VM for Wasmer2VM {
         )
         .expect("Cannot create memory for a contract call");
 
+        let submodule_factory = Wasmer2SubmoduleFactory::new(cache);
+
         // FIXME: this mostly duplicates the `run_module` method.
         // Note that we don't clone the actual backing memory, just increase the RC.
         let vmmemory = memory.vm();
@@ -613,6 +672,7 @@ impl crate::runner::VM for Wasmer2VM {
             fees_config,
             promise_results,
             &mut memory,
+            &submodule_factory,
             current_protocol_version,
         );
 
@@ -665,6 +725,304 @@ impl crate::runner::VM for Wasmer2VM {
         Ok(self
             .compile_and_cache(code, Some(cache))?
             .map(|_| ContractPrecompilatonResult::ContractCompiled))
+    }
+}
+
+struct Wasmer2SubmoduleFactory<'a> {
+    cache: Option<&'a dyn CompiledContractCache>,
+}
+
+impl<'a> Wasmer2SubmoduleFactory<'a> {
+    pub fn new(cache: Option<&'a dyn CompiledContractCache>) -> Self {
+        Self { cache }
+    }
+}
+
+impl<'a> near_vm_logic::SubmoduleVMFactory for Wasmer2SubmoduleFactory<'a> {
+    fn create(
+        &self,
+        code: ContractCode,
+        gas_limit: u64,
+        config: &VMConfig,
+        context: &near_vm_logic::VMContext,
+        _protocol_version: ProtocolVersion,
+    ) -> Result<Box<dyn near_vm_logic::SubmoduleVM>, near_vm_logic::VMLogicError> {
+        let vm = Wasmer2VM::new(config.clone());
+        // TODO: Proper error propagation?
+        let artifact = vm
+            .compile_and_load(&code, self.cache)
+            .map_err(|e| {
+                near_vm_logic::VMLogicError::ExternalError(near_vm_errors::AnyError::new(format!(
+                    "{e:?}"
+                )))
+            })?
+            .map_err(|e| {
+                near_vm_logic::VMLogicError::ExternalError(near_vm_errors::AnyError::new(format!(
+                    "{e:?}"
+                )))
+            })?;
+
+        let max_gas_burnt = match &context.view_config {
+            Some(view) => view.max_gas_burnt,
+            None => config.limit_config.max_gas_burnt,
+        };
+
+        let memory = Wasmer2Memory::new(
+            config.limit_config.initial_memory_pages,
+            config.limit_config.max_memory_pages,
+        )
+        .expect("Cannot create memory for a contract call");
+
+        Ok(Box::new(Wasmer2SubmoduleVM {
+            vm,
+            gas: GasCounter::new(
+                config.ext_costs.clone(),
+                max_gas_burnt,
+                config.regular_op_cost,
+                gas_limit,
+                context.is_view(),
+            ),
+            artifact,
+            stack_limit: config.limit_config.wasmer2_stack_limit,
+            memory: memory.vm(),
+            state: Wasmer2SubmoduleState::new(memory),
+            cr: None,
+        }))
+    }
+}
+
+struct Wasmer2SubmoduleState {
+    return_buffer: Vec<u8>,
+    input_buffer: Vec<u8>,
+    memory: Wasmer2Memory,
+    yielder: Option<*const corosensei::Yielder<Vec<u8>, Vec<u8>>>,
+}
+
+impl Wasmer2SubmoduleState {
+    fn new(memory: Wasmer2Memory) -> Self {
+        Self { return_buffer: Vec::new(), input_buffer: Vec::new(), memory, yielder: None }
+    }
+}
+
+struct Wasmer2SubmoduleVM {
+    vm: Wasmer2VM,
+    gas: GasCounter,
+    artifact: VMArtifact,
+    stack_limit: i32,
+    memory: wasmer_vm::VMMemory,
+    state: Wasmer2SubmoduleState,
+    cr: Option<corosensei::Coroutine<Vec<u8>, Vec<u8>, Vec<u8>>>,
+}
+
+impl near_vm_logic::SubmoduleVM for Wasmer2SubmoduleVM {
+    // Idea: try using corosensei library.
+    // First call to Coroutine::resume <=> start
+    // Yielder::suspend <=> callback
+    // Coroutine::resume <=> resume
+
+    fn start(&mut self) -> near_vm_logic::SubmoduleExecutionResult {
+        let gas = self.gas.gas_counter_raw_ptr() as *mut wasmer_types::FastGasCounter;
+        let entry_point = match get_entrypoint_index(&*self.artifact, "main") {
+            Ok(index) => index,
+            Err(_) => {
+                return SubmoduleExecutionResult::Error(SubmoduleExecutionError::MissingMainFn);
+            }
+        };
+
+        let instance_config = unsafe {
+            // SAFETY: see Wasmer2VM::run_method
+            InstanceConfig::default().with_counter(gas).with_stack_limit(self.stack_limit)
+        };
+        let instance_artifact = Arc::clone(&self.artifact);
+        let tunables = TunablesWrapper(self.vm.config.clone());
+
+        let cr_memory = self.memory.clone();
+        // SAFETY: `state` is catpured in the `cr` closure. There is no way for `cr` to outlive `self.state`.
+        let state: *mut Wasmer2SubmoduleState = (&mut self.state) as *mut _;
+        let engine: *const wasmer_engine_universal::UniversalEngine = self.artifact.engine() as _;
+        let cr = corosensei::Coroutine::new(move |yielder, _| {
+            unsafe {
+                (*state).yielder = Some(yielder as _);
+            }
+            let resolver = SubmoduleResolver::new(cr_memory, state, engine);
+            let instance = unsafe {
+                // TODO: fix unwrap
+                let handle = instance_artifact
+                    .instantiate(&tunables, &resolver, Box::new(()), instance_config)
+                    .unwrap();
+                handle.finish_instantiation().unwrap();
+                handle
+            };
+            if let Some(function) = instance.function_by_index(entry_point) {
+                let trampoline =
+                    function.call_trampoline.expect("externs always have a trampoline");
+                // TODO: fix unwrap()
+                unsafe {
+                    instance
+                        .invoke_function(
+                            function.vmctx,
+                            trampoline,
+                            function.address,
+                            [].as_mut_ptr() as *mut _,
+                        )
+                        .unwrap();
+                }
+            }
+            unsafe { (*resolver.state).return_buffer.clone() }
+        });
+        self.cr = Some(cr);
+
+        match self.cr.as_mut().unwrap().resume(Vec::new()) {
+            corosensei::CoroutineResult::Yield(value) => {
+                near_vm_logic::SubmoduleExecutionResult::Callback(value)
+            }
+            corosensei::CoroutineResult::Return(value) => {
+                near_vm_logic::SubmoduleExecutionResult::Success(value)
+            }
+        }
+    }
+
+    fn resume(&mut self, response: Vec<u8>) -> near_vm_logic::SubmoduleExecutionResult {
+        // TODO: error handling
+        let result = self.cr.as_mut().unwrap().resume(response);
+        match result {
+            corosensei::CoroutineResult::Yield(value) => {
+                near_vm_logic::SubmoduleExecutionResult::Callback(value)
+            }
+            corosensei::CoroutineResult::Return(value) => {
+                near_vm_logic::SubmoduleExecutionResult::Success(value)
+            }
+        }
+    }
+}
+
+/// Data structure to handle the host functions available to submodules.
+struct SubmoduleResolver {
+    memory: wasmer_vm::VMMemory,
+    state: *mut Wasmer2SubmoduleState,
+    metadata: Arc<wasmer_vm::ExportFunctionMetadata>,
+    engine: *const wasmer_engine_universal::UniversalEngine,
+}
+
+impl SubmoduleResolver {
+    fn new(
+        memory: wasmer_vm::VMMemory,
+        state: *mut Wasmer2SubmoduleState,
+        engine: *const wasmer_engine_universal::UniversalEngine,
+    ) -> Self {
+        let metadata = unsafe {
+            // SAFETY: the functions here are thread-safe. We ensure that the lifetime of `VMLogic`
+            // is sufficiently long by tying the lifetime of VMLogic to the return type which
+            // contains this metadata.
+            wasmer_vm::ExportFunctionMetadata::new(state as *mut _, None, |ptr| ptr, |_| {})
+        };
+        Self { memory, state, metadata: Arc::new(metadata), engine }
+    }
+}
+
+impl wasmer_vm::Resolver for SubmoduleResolver {
+    fn resolve(&self, _index: u32, module: &str, field: &str) -> Option<wasmer_vm::Export> {
+        // Need something along the lines of imports.rs#L378
+        // Want to map `callback` host function to `self.yielder.suspend`
+        // Want to map `value_return` host function to setting `self.return_buffer`
+
+        if module != "env" {
+            return None;
+        }
+        if field == "memory" {
+            return Some(wasmer_vm::Export::Memory(self.memory.clone()));
+        }
+
+        // Host function to yield the submodule, passing data back to the main contract
+        extern "C" fn callback(env: *mut Wasmer2SubmoduleState, yield_ptr: i64, yield_len: i64) {
+            let yield_value = unsafe {
+                // TODO: charge gas for memory access
+                let mut buf = Vec::with_capacity(yield_len as usize);
+                // TODO: error handling
+                (*env).memory.read_memory(yield_ptr as u64, &mut buf).unwrap();
+                buf
+            };
+            let input = unsafe { (*(*env).yielder.unwrap()).suspend(yield_value) };
+            let buf = unsafe { &mut (*env).input_buffer };
+            // SAFETY: intentionally not writing `*buf = input` because the `input` object
+            // will be dropped after this call. Instead we need to copy the values into the
+            // buffer itself without changing the buffer pointer.
+            buf.clear();
+            for x in input {
+                buf.push(x)
+            }
+        }
+
+        // Host function to get the size of the input buffer (used to know how big of a memory
+        // allocation to create for copying the input buffer).
+        extern "C" fn get_input_size(env: *mut Wasmer2SubmoduleState) -> i64 {
+            let result = unsafe { (*env).input_buffer.len() };
+            result as i64
+        }
+
+        // Host function to copy the input buffer into Wasm memory
+        unsafe extern "C" fn get_input(env: *mut Wasmer2SubmoduleState, dest_ptr: i64) {
+            // TODO: error handling
+            (*env).memory.write_memory(dest_ptr as u64, &(*env).input_buffer).unwrap();
+        }
+
+        // Host function to return a value to the host process
+        extern "C" fn return_value(
+            env: *mut Wasmer2SubmoduleState,
+            result_ptr: i64,
+            result_len: i64,
+        ) {
+            let result = unsafe {
+                let mut buf = Vec::with_capacity(result_len as usize);
+                // TODO: error handling
+                (*env).memory.read_memory(result_ptr as u64, &mut buf).unwrap();
+                buf
+            };
+            let return_buffer = unsafe { &mut (*env).return_buffer };
+            return_buffer.clear();
+            for x in result {
+                return_buffer.push(x);
+            }
+        }
+
+        let (address, signature) = if field == "callback" {
+            let signature = wasmer_types::FunctionTypeRef::new(
+                &[wasmer_types::Type::I64, wasmer_types::Type::I64],
+                &[],
+            );
+            let address = callback as _;
+            (address, signature)
+        } else if field == "get_input_size" {
+            let signature = wasmer_types::FunctionTypeRef::new(&[], &[wasmer_types::Type::I64]);
+            let address = get_input_size as _;
+            (address, signature)
+        } else if field == "get_input" {
+            let signature = wasmer_types::FunctionTypeRef::new(&[wasmer_types::Type::I64], &[]);
+            let address = get_input as _;
+            (address, signature)
+        } else if field == "return_value" {
+            let signature = wasmer_types::FunctionTypeRef::new(
+                &[wasmer_types::Type::I64, wasmer_types::Type::I64],
+                &[],
+            );
+            let address = return_value as _;
+            (address, signature)
+        } else {
+            return None;
+        };
+
+        let signature = unsafe { (*self.engine).register_signature(signature) };
+        Some(wasmer_vm::Export::Function(wasmer_vm::ExportFunction {
+            vm_function: wasmer_vm::VMFunction {
+                address,
+                vmctx: wasmer_vm::VMFunctionEnvironment { host_env: self.state as *mut _ },
+                signature,
+                kind: wasmer_vm::VMFunctionKind::Static,
+                call_trampoline: None,
+                instance_ref: None,
+            },
+            metadata: Some(Arc::clone(&self.metadata)),
+        }))
     }
 }
 

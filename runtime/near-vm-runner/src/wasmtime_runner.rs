@@ -182,6 +182,7 @@ impl crate::runner::VM for WasmtimeVM {
         )
         .unwrap();
         let memory_copy = memory.0;
+        let submodule_factory = near_vm_logic::NoopSubmoduleVMFactory;
         let mut logic = VMLogic::new_with_protocol_version(
             ext,
             context,
@@ -189,6 +190,7 @@ impl crate::runner::VM for WasmtimeVM {
             fees_config,
             promise_results,
             &mut memory,
+            &submodule_factory,
             current_protocol_version,
         );
 

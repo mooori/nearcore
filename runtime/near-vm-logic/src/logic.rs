@@ -1,5 +1,8 @@
 use crate::context::VMContext;
-use crate::dependencies::{External, MemSlice, MemoryLike};
+use crate::dependencies::{
+    External, MemSlice, MemoryLike, SubmoduleExecutionError, SubmoduleExecutionResult, SubmoduleVM,
+    SubmoduleVMFactory,
+};
 use crate::gas_counter::{FastGasCounter, GasCounter};
 use crate::receipt_manager::ReceiptManager;
 use crate::types::{PromiseIndex, PromiseResult, ReceiptIndex, ReturnData};
@@ -8,6 +11,7 @@ use crate::{ReceiptMetadata, StorageGetMode, ValuePtr};
 use near_crypto::Secp256K1Signature;
 use near_primitives::checked_feature;
 use near_primitives::config::ViewConfig;
+use near_primitives::contract::ContractCode;
 use near_primitives::profile::ProfileDataV3;
 use near_primitives::runtime::fees::RuntimeFeesConfig;
 use near_primitives::version::is_implicit_account_creation_enabled;
@@ -56,6 +60,9 @@ pub struct VMLogic<'a> {
     /// Registers can be used by the guest to store blobs of data without moving them across
     /// host-guest boundary.
     registers: crate::vmstate::Registers,
+
+    submodule_factory: &'a dyn SubmoduleVMFactory,
+    submodules: std::collections::HashMap<Vec<u8>, Box<dyn SubmoduleVM>>,
 
     /// The DAG of promises, indexed by promise id.
     promises: Vec<Promise>,
@@ -132,6 +139,7 @@ impl<'a> VMLogic<'a> {
         fees_config: &'a RuntimeFeesConfig,
         promise_results: &'a [PromiseResult],
         memory: &'a mut dyn MemoryLike,
+        submodule_factory: &'a dyn SubmoduleVMFactory,
         current_protocol_version: ProtocolVersion,
     ) -> Self {
         // Overflow should be checked before calling VMLogic.
@@ -164,6 +172,8 @@ impl<'a> VMLogic<'a> {
             return_data: ReturnData::None,
             logs: vec![],
             registers: Default::default(),
+            submodule_factory,
+            submodules: std::collections::HashMap::new(),
             promises: vec![],
             total_log_length: 0,
             current_protocol_version,
@@ -204,6 +214,128 @@ impl<'a> VMLogic<'a> {
     #[cfg(test)]
     pub(crate) fn registers(&mut self) -> &mut crate::vmstate::Registers {
         &mut self.registers
+    }
+
+    // ##################
+    // # Submodules API #
+    // ##################
+
+    fn internal_start_submodule(
+        &mut self,
+        key: Vec<u8>,
+        gas_limit: Option<u64>,
+    ) -> Result<SubmoduleExecutionResult> {
+        if self.submodules.contains_key(&key) {
+            // TODO: Need to allow recursive submodule calls?
+            return Ok(SubmoduleExecutionResult::Error(SubmoduleExecutionError::AlreadyStarted));
+        }
+
+        let code = match Self::internal_storage_read(self.ext, &mut self.gas_counter, &key)? {
+            Some(code) => ContractCode::new(code, None),
+            None => {
+                return Ok(SubmoduleExecutionResult::Error(SubmoduleExecutionError::NotFound));
+            }
+        };
+        let gas_limit = gas_limit.unwrap_or_else(|| self.gas_counter.unused_gas());
+        let vm = self.submodule_factory.create(
+            code,
+            gas_limit,
+            self.config,
+            &self.context,
+            self.current_protocol_version,
+        )?;
+        let vm = self.submodules.entry(key).or_insert(vm);
+        let result = vm.start();
+        Ok(result)
+    }
+
+    pub fn start_submodule(
+        &mut self,
+        key_ptr: u64,
+        key_len: u64,
+        gas_limit: u64,
+        output_register_id: u64,
+    ) -> Result<u64> {
+        let key =
+            self.memory.view(&mut self.gas_counter, MemSlice { ptr: key_ptr, len: key_len })?;
+        let gas_limit =
+            if gas_limit > self.gas_counter.unused_gas() { None } else { Some(gas_limit) };
+        let result = self.internal_start_submodule(key.to_vec(), gas_limit)?;
+
+        match result {
+            SubmoduleExecutionResult::Success(bytes) => {
+                self.registers.set(
+                    &mut self.gas_counter,
+                    &self.config.limit_config,
+                    output_register_id,
+                    bytes,
+                )?;
+                Ok(0)
+            }
+            SubmoduleExecutionResult::Callback(bytes) => {
+                self.registers.set(
+                    &mut self.gas_counter,
+                    &self.config.limit_config,
+                    output_register_id,
+                    bytes,
+                )?;
+                Ok(1)
+            }
+            SubmoduleExecutionResult::Error(e) => Ok(e.status_code()),
+        }
+    }
+
+    fn internal_resume_submodule(
+        &mut self,
+        key: Vec<u8>,
+        response: Vec<u8>,
+    ) -> Result<SubmoduleExecutionResult> {
+        let vm = match self.submodules.get_mut(&key) {
+            Some(vm) => vm,
+            None => {
+                return Ok(SubmoduleExecutionResult::Error(SubmoduleExecutionError::NotStarted));
+            }
+        };
+        let result = vm.resume(response);
+        Ok(result)
+    }
+
+    pub fn resume_submodule(
+        &mut self,
+        key_ptr: u64,
+        key_len: u64,
+        response_ptr: u64,
+        response_len: u64,
+        output_register_id: u64,
+    ) -> Result<u64> {
+        let key =
+            self.memory.view(&mut self.gas_counter, MemSlice { ptr: key_ptr, len: key_len })?;
+        let response = self
+            .memory
+            .view(&mut self.gas_counter, MemSlice { ptr: response_ptr, len: response_len })?;
+        let result = self.internal_resume_submodule(key.to_vec(), response.to_vec())?;
+
+        match result {
+            SubmoduleExecutionResult::Success(bytes) => {
+                self.registers.set(
+                    &mut self.gas_counter,
+                    &self.config.limit_config,
+                    output_register_id,
+                    bytes,
+                )?;
+                Ok(0)
+            }
+            SubmoduleExecutionResult::Callback(bytes) => {
+                self.registers.set(
+                    &mut self.gas_counter,
+                    &self.config.limit_config,
+                    output_register_id,
+                    bytes,
+                )?;
+                Ok(1)
+            }
+            SubmoduleExecutionResult::Error(e) => Ok(e.status_code()),
+        }
     }
 
     // #################
@@ -2425,6 +2557,27 @@ impl<'a> VMLogic<'a> {
         }
     }
 
+    fn internal_storage_read(
+        ext: &mut dyn External,
+        gas_counter: &mut GasCounter,
+        key: &[u8],
+    ) -> Result<Option<Vec<u8>>> {
+        gas_counter.pay_per(storage_read_key_byte, key.len() as u64)?;
+        let nodes_before = ext.get_trie_nodes_count();
+        let read_mode = if cfg!(feature = "protocol_feature_flat_state") {
+            StorageGetMode::FlatStorage
+        } else {
+            StorageGetMode::Trie
+        };
+        let read = ext.storage_get(&key, read_mode);
+        let nodes_delta = ext
+            .get_trie_nodes_count()
+            .checked_sub(&nodes_before)
+            .ok_or(InconsistentStateError::IntegerOverflow)?;
+        gas_counter.add_trie_fees(&nodes_delta)?;
+        Self::deref_value(gas_counter, storage_read_value_byte, read?)
+    }
+
     /// Reads the value stored under the given key.
     /// * If key is used copies the content of the value into the `register_id`, even if the content
     ///   is zero bytes. Returns `1`;
@@ -2453,21 +2606,7 @@ impl<'a> VMLogic<'a> {
             }
             .into());
         }
-        self.gas_counter.pay_per(storage_read_key_byte, key.len() as u64)?;
-        let nodes_before = self.ext.get_trie_nodes_count();
-        let read_mode = if cfg!(feature = "protocol_feature_flat_state") {
-            StorageGetMode::FlatStorage
-        } else {
-            StorageGetMode::Trie
-        };
-        let read = self.ext.storage_get(&key, read_mode);
-        let nodes_delta = self
-            .ext
-            .get_trie_nodes_count()
-            .checked_sub(&nodes_before)
-            .ok_or(InconsistentStateError::IntegerOverflow)?;
-        self.gas_counter.add_trie_fees(&nodes_delta)?;
-        let read = Self::deref_value(&mut self.gas_counter, storage_read_value_byte, read?)?;
+        let read = Self::internal_storage_read(self.ext, &mut self.gas_counter, &key)?;
 
         near_o11y::io_trace!(
             storage_op = "read",

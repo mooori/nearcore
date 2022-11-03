@@ -843,12 +843,33 @@ pub fn set_code(state_update: &mut TrieUpdate, account_id: AccountId, code: &Con
     state_update.set(TrieKey::ContractCode { account_id }, code.code().to_vec());
 }
 
+pub fn set_submodule_code(
+    state_update: &mut TrieUpdate,
+    account_id: AccountId,
+    key: Vec<u8>,
+    code: &ContractCode,
+) {
+    // TODO: separate storage from contract data
+    state_update.set(TrieKey::ContractData { account_id, key }, code.code().to_vec());
+}
+
 pub fn get_code(
     trie: &dyn TrieAccess,
     account_id: &AccountId,
     code_hash: Option<CryptoHash>,
 ) -> Result<Option<ContractCode>, StorageError> {
     let key = TrieKey::ContractCode { account_id: account_id.clone() };
+    trie.get(&key).map(|opt| opt.map(|code| ContractCode::new(code, code_hash)))
+}
+
+pub fn get_submodule_code(
+    trie: &dyn TrieAccess,
+    account_id: &AccountId,
+    key: &[u8],
+    code_hash: Option<CryptoHash>,
+) -> Result<Option<ContractCode>, StorageError> {
+    // TODO: separate storage from contract data
+    let key = TrieKey::ContractData { account_id: account_id.clone(), key: key.to_vec() };
     trie.get(&key).map(|opt| opt.map(|code| ContractCode::new(code, code_hash)))
 }
 
