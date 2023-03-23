@@ -11,8 +11,8 @@ use near_primitives::receipt::Receipt;
 use near_primitives::test_utils::create_user_test_signer;
 use near_primitives::transaction::{
     Action, AddKeyAction, CreateAccountAction, DeleteAccountAction, DeleteKeyAction,
-    DeployContractAction, ExecutionOutcome, FunctionCallAction, SignedTransaction, StakeAction,
-    TransferAction,
+    DeployContractAction, DeploySubmoduleAction, ExecutionOutcome, FunctionCallAction,
+    SignedTransaction, StakeAction, TransferAction,
 };
 use near_primitives::types::{AccountId, Balance, BlockHeight, Gas, MerkleHash, ShardId};
 use near_primitives::views::{
@@ -125,6 +125,19 @@ pub trait User {
             signer_id.clone(),
             signer_id,
             vec![Action::DeployContract(DeployContractAction { code })],
+        )
+    }
+
+    fn deploy_submodule(
+        &self,
+        signer_id: AccountId,
+        key: Vec<u8>,
+        code: Vec<u8>,
+    ) -> Result<FinalExecutionOutcomeView, ServerError> {
+        self.sign_and_commit_actions(
+            signer_id.clone(),
+            signer_id,
+            vec![Action::DeploySubmodule(DeploySubmoduleAction { code, key })],
         )
     }
 

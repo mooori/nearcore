@@ -1,24 +1,13 @@
-use crate::node::{Node, RuntimeNode};
-use near_chain_configs::Genesis;
+use crate::node::{setup_runtime_node_with_contract, Node};
 use near_primitives::config::ExtCosts;
-use near_primitives::runtime::config::RuntimeConfig;
-use near_primitives::runtime::config_store::RuntimeConfigStore;
 use near_primitives::serialize::to_base64;
 use near_primitives::types::AccountId;
-use near_primitives::version::PROTOCOL_VERSION;
 use near_primitives::views::{
     CostGasUsed, ExecutionOutcomeWithIdView, ExecutionStatusView, FinalExecutionStatus,
 };
-use nearcore::config::GenesisExt;
 use std::collections::HashSet;
 use std::mem::size_of;
-use testlib::runtime_utils::{add_test_contract, alice_account, bob_account};
-
-/// Initial balance used in tests.
-const TESTING_INIT_BALANCE: u128 = 1_000_000_000 * NEAR_BASE;
-
-/// One NEAR, divisible by 10^24.
-const NEAR_BASE: u128 = 1_000_000_000_000_000_000_000_000;
+use testlib::runtime_utils::{alice_account, bob_account};
 
 /// Max prepaid amount of gas.
 const MAX_GAS: u64 = 300_000_000_000_000;
@@ -35,42 +24,6 @@ fn is_nondeterministic_cost(cost: &str) -> bool {
 
 fn test_contract_account() -> AccountId {
     format!("test-contract.{}", alice_account().as_str()).parse().unwrap()
-}
-
-fn setup_runtime_node_with_contract(wasm_binary: &[u8]) -> RuntimeNode {
-    // Create a `RuntimeNode`. Load `RuntimeConfig` from `RuntimeConfigStore`
-    // to ensure we are using the latest configuration.
-    let mut genesis =
-        Genesis::test(vec![alice_account(), bob_account(), "carol.near".parse().unwrap()], 3);
-    add_test_contract(&mut genesis, &alice_account());
-    add_test_contract(&mut genesis, &bob_account());
-    let runtime_config_store = RuntimeConfigStore::new(None);
-    let runtime_config = runtime_config_store.get_config(PROTOCOL_VERSION);
-    let node = RuntimeNode::new_from_genesis_and_config(
-        &alice_account(),
-        genesis,
-        RuntimeConfig::clone(runtime_config),
-    );
-
-    let account_id = node.account_id().unwrap();
-    let node_user = node.user();
-    let tx_result = node_user
-        .create_account(
-            account_id,
-            test_contract_account(),
-            node.signer().public_key(),
-            TESTING_INIT_BALANCE / 2,
-        )
-        .unwrap();
-    assert_eq!(tx_result.status, FinalExecutionStatus::SuccessValue(Vec::new()));
-    assert_eq!(tx_result.receipts_outcome.len(), 2);
-
-    let tx_result =
-        node_user.deploy_contract(test_contract_account(), wasm_binary.to_vec()).unwrap();
-    assert_eq!(tx_result.status, FinalExecutionStatus::SuccessValue(Vec::new()));
-    assert_eq!(tx_result.receipts_outcome.len(), 1);
-
-    node
 }
 
 fn get_receipts_status_with_clear_hash(
@@ -101,7 +54,7 @@ fn test_cost_sanity() {
     } else {
         near_test_contracts::rs_contract()
     };
-    let node = setup_runtime_node_with_contract(test_contract);
+    let node = setup_runtime_node_with_contract(test_contract_account(), test_contract);
 
     let args = format!(
         r#"{{
@@ -172,7 +125,7 @@ fn test_cost_sanity_nondeterministic() {
     let contract = near_test_contracts::wat_contract(
         r#"(module (func (export "main") (i32.const 92) (drop)))"#,
     );
-    let node = setup_runtime_node_with_contract(&contract);
+    let node = setup_runtime_node_with_contract(test_contract_account(), &contract);
     let res = node
         .user()
         .function_call(alice_account(), test_contract_account(), "main", vec![], MAX_GAS, 0)
@@ -212,7 +165,10 @@ fn test_cost_sanity_nondeterministic() {
 /// [gas instrumentation]: https://nomicon.io/RuntimeSpec/Preparation#gas-instrumentation
 #[test]
 fn test_sanity_used_gas() {
-    let node = setup_runtime_node_with_contract(&contract_sanity_check_used_gas());
+    let node = setup_runtime_node_with_contract(
+        test_contract_account(),
+        &contract_sanity_check_used_gas(),
+    );
     let res = node
         .user()
         .function_call(alice_account(), test_contract_account(), "main", vec![], MAX_GAS, 0)

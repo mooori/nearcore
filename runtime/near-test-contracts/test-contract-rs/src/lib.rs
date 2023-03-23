@@ -1242,3 +1242,30 @@ pub unsafe fn sanity_check_panic_utf8() {
     let data = b"xyz";
     panic_utf8(data.len() as u64, data.as_ptr() as u64);
 }
+
+/// Returns submodule code stored under `key` or an empty vector if no code is stored under `key`.
+///
+/// Expects the bytes of `key` as input.
+#[no_mangle]
+pub unsafe fn get_submodule() {
+    let input_register = 0;
+    let code_register = 1;
+
+    // Retrieve key from input.
+    input(input_register);
+    let key = vec![0; register_len(input_register) as usize];
+    read_register(input_register, key.as_ptr() as u64);
+
+    // Retrieve code stored under `key`.
+    // TODO Needs an update when code is stored separately.
+    let read_result = storage_read(key.len() as u64, key.as_ptr() as u64, code_register);
+    let code = if read_result == 1 {
+        let data = vec![0u8; register_len(code_register) as usize];
+        read_register(code_register, data.as_ptr() as u64);
+        data
+    } else {
+        vec![]
+    };
+
+    value_return(code.len() as u64, code.as_ptr() as u64);
+}

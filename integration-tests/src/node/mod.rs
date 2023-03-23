@@ -10,20 +10,26 @@ use near_crypto::{InMemorySigner, Signer};
 use near_jsonrpc_primitives::errors::ServerError;
 use near_primitives::contract::ContractCode;
 use near_primitives::num_rational::Ratio;
+use near_primitives::runtime::config::RuntimeConfig;
+use near_primitives::runtime::config_store::RuntimeConfigStore;
 use near_primitives::state_record::StateRecord;
 use near_primitives::transaction::SignedTransaction;
 use near_primitives::types::{AccountId, Balance, NumSeats};
 use near_primitives::validator_signer::InMemoryValidatorSigner;
-use near_primitives::views::AccountView;
+use near_primitives::version::PROTOCOL_VERSION;
+use near_primitives::views::{AccountView, FinalExecutionStatus};
 use nearcore::config::{
     create_testnet_configs, create_testnet_configs_from_seeds, Config, GenesisExt,
 };
 use nearcore::NearConfig;
-use testlib::runtime_utils::{alice_account, bob_account};
+use testlib::runtime_utils::{add_test_contract, alice_account, bob_account};
 
 mod process_node;
 mod runtime_node;
 mod thread_node;
+
+/// One NEAR, divisible by 10^24.
+const NEAR_BASE: u128 = 1_000_000_000_000_000_000_000_000;
 
 pub const TEST_BLOCK_FETCH_LIMIT: u64 = 5;
 pub const TEST_BLOCK_MAX_SIZE: u32 = 1000;
@@ -191,4 +197,41 @@ pub fn sample_queryable_node(nodes: &[Arc<RwLock<dyn Node>>]) -> usize {
         k = rand::random::<usize>() % num_nodes;
     }
     k
+}
+
+/// Sets up a `RuntimeNode`, creates an account for `account_id` and deploys `wasm_binary` to it.
+/// The `account_id` must be a subaccount of `alice_account`.
+pub fn setup_runtime_node_with_contract(account_id: AccountId, wasm_binary: &[u8]) -> RuntimeNode {
+    // Create a `RuntimeNode`. Load `RuntimeConfig` from `RuntimeConfigStore`
+    // to ensure we are using the latest configuration.
+    let mut genesis =
+        Genesis::test(vec![alice_account(), bob_account(), "carol.near".parse().unwrap()], 3);
+    add_test_contract(&mut genesis, &alice_account());
+    add_test_contract(&mut genesis, &bob_account());
+    let runtime_config_store = RuntimeConfigStore::new(None);
+    let runtime_config = runtime_config_store.get_config(PROTOCOL_VERSION);
+    let node = RuntimeNode::new_from_genesis_and_config(
+        &alice_account(),
+        genesis,
+        RuntimeConfig::clone(runtime_config),
+    );
+
+    let node_account_id = node.account_id().unwrap();
+    let node_user = node.user();
+    let tx_result = node_user
+        .create_account(
+            node_account_id,
+            account_id.clone(),
+            node.signer().public_key(),
+            500_000_000 * NEAR_BASE,
+        )
+        .unwrap();
+    assert_eq!(tx_result.status, FinalExecutionStatus::SuccessValue(Vec::new()));
+    assert_eq!(tx_result.receipts_outcome.len(), 2);
+
+    let tx_result = node_user.deploy_contract(account_id, wasm_binary.to_vec()).unwrap();
+    assert_eq!(tx_result.status, FinalExecutionStatus::SuccessValue(Vec::new()));
+    assert_eq!(tx_result.receipts_outcome.len(), 1);
+
+    node
 }
