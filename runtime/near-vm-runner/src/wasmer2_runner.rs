@@ -837,7 +837,7 @@ impl near_vm_logic::SubmoduleVM for Wasmer2SubmoduleVM {
         let tunables = TunablesWrapper(self.vm.config.clone());
 
         let cr_memory = self.memory.clone();
-        // SAFETY: `state` is catpured in the `cr` closure. There is no way for `cr` to outlive `self.state`.
+        // SAFETY: `state` is captured in the `cr` closure. There is no way for `cr` to outlive `self.state`.
         let state: *mut Wasmer2SubmoduleState = (&mut self.state) as *mut _;
         let engine: *const wasmer_engine_universal::UniversalEngine = self.artifact.engine() as _;
         let cr = corosensei::Coroutine::new(move |yielder, _| {

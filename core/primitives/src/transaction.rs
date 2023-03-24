@@ -151,8 +151,8 @@ pub struct DeploySubmoduleAction {
 }
 
 impl From<DeploySubmoduleAction> for Action {
-    fn from(deploy_contract_action: DeploySubmoduleAction) -> Self {
-        Self::DeploySubmodule(deploy_contract_action)
+    fn from(deploy_submodule_action: DeploySubmoduleAction) -> Self {
+        Self::DeploySubmodule(deploy_submodule_action)
     }
 }
 
