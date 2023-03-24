@@ -73,16 +73,16 @@ imports! {
     // # Submodules API #
     // ##################
     start_submodule<[
-        key_ptr: u64,
         key_len: u64,
+        key_ptr: u64,
         gas_limit: u64,
         output_register_id: u64
     ] -> [u64]>,
     resume_submodule<[
-        key_ptr: u64,
         key_len: u64,
-        response_ptr: u64,
+        key_ptr: u64,
         response_len: u64,
+        response_ptr: u64,
         output_register_id: u64
     ] -> [u64]>,
     // #############

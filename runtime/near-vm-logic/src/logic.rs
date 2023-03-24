@@ -251,8 +251,8 @@ impl<'a> VMLogic<'a> {
 
     pub fn start_submodule(
         &mut self,
-        key_ptr: u64,
         key_len: u64,
+        key_ptr: u64,
         gas_limit: u64,
         output_register_id: u64,
     ) -> Result<u64> {
@@ -302,10 +302,10 @@ impl<'a> VMLogic<'a> {
 
     pub fn resume_submodule(
         &mut self,
-        key_ptr: u64,
         key_len: u64,
-        response_ptr: u64,
+        key_ptr: u64,
         response_len: u64,
+        response_ptr: u64,
         output_register_id: u64,
     ) -> Result<u64> {
         let key =

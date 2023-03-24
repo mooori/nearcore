@@ -934,7 +934,7 @@ impl wasmer_vm::Resolver for SubmoduleResolver {
         }
 
         // Host function to yield the submodule, passing data back to the main contract
-        extern "C" fn callback(env: *mut Wasmer2SubmoduleState, yield_ptr: i64, yield_len: i64) {
+        extern "C" fn callback(env: *mut Wasmer2SubmoduleState, yield_len: i64, yield_ptr: i64) {
             let yield_value = unsafe {
                 // TODO: charge gas for memory access
                 let mut buf = Vec::with_capacity(yield_len as usize);
@@ -969,8 +969,8 @@ impl wasmer_vm::Resolver for SubmoduleResolver {
         // Host function to return a value to the host process
         extern "C" fn return_value(
             env: *mut Wasmer2SubmoduleState,
-            result_ptr: i64,
             result_len: i64,
+            result_ptr: i64,
         ) {
             let result = unsafe {
                 let mut buf = Vec::with_capacity(result_len as usize);
