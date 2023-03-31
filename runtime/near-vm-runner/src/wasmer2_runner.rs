@@ -767,6 +767,14 @@ impl<'a> near_vm_logic::SubmoduleVMFactory for Wasmer2SubmoduleFactory<'a> {
             None => config.limit_config.max_gas_burnt,
         };
 
+        let gas_counter = GasCounter::new(
+            config.ext_costs.clone(),
+            max_gas_burnt,
+            config.regular_op_cost,
+            gas_limit,
+            context.is_view(),
+        );
+
         let memory = Wasmer2Memory::new(
             config.limit_config.initial_memory_pages,
             config.limit_config.max_memory_pages,
@@ -775,23 +783,17 @@ impl<'a> near_vm_logic::SubmoduleVMFactory for Wasmer2SubmoduleFactory<'a> {
 
         Ok(Box::new(Wasmer2SubmoduleVM {
             vm,
-            gas: GasCounter::new(
-                config.ext_costs.clone(),
-                max_gas_burnt,
-                config.regular_op_cost,
-                gas_limit,
-                context.is_view(),
-            ),
             artifact,
             stack_limit: config.limit_config.wasmer2_stack_limit,
             memory: memory.vm(),
-            state: Wasmer2SubmoduleState::new(memory),
+            state: Wasmer2SubmoduleState::new(gas_counter, memory),
             cr: None,
         }))
     }
 }
 
 struct Wasmer2SubmoduleState {
+    gas_counter: GasCounter,
     return_buffer: Vec<u8>,
     input_buffer: Vec<u8>,
     memory: Wasmer2Memory,
@@ -799,14 +801,19 @@ struct Wasmer2SubmoduleState {
 }
 
 impl Wasmer2SubmoduleState {
-    fn new(memory: Wasmer2Memory) -> Self {
-        Self { return_buffer: Vec::new(), input_buffer: Vec::new(), memory, yielder: None }
+    fn new(gas_counter: GasCounter, memory: Wasmer2Memory) -> Self {
+        Self {
+            gas_counter,
+            return_buffer: Vec::new(),
+            input_buffer: Vec::new(),
+            memory,
+            yielder: None,
+        }
     }
 }
 
 struct Wasmer2SubmoduleVM {
     vm: Wasmer2VM,
-    gas: GasCounter,
     artifact: VMArtifact,
     stack_limit: i32,
     memory: wasmer_vm::VMMemory,
@@ -821,7 +828,6 @@ impl near_vm_logic::SubmoduleVM for Wasmer2SubmoduleVM {
     // Coroutine::resume <=> resume
 
     fn start(&mut self) -> near_vm_logic::SubmoduleExecutionResult {
-        let gas = self.gas.gas_counter_raw_ptr() as *mut wasmer_types::FastGasCounter;
         let entry_point = match get_entrypoint_index(&*self.artifact, "main") {
             Ok(index) => index,
             Err(_) => {
@@ -829,8 +835,14 @@ impl near_vm_logic::SubmoduleVM for Wasmer2SubmoduleVM {
             }
         };
 
+        // SAFETY: Since `gas` is contained in `self.state` it remains dereferencable during the
+        // lifetime of `self`.
+        // TODO verify matching FastGasCounter layout in nearcore and wasmer? See
+        // https://github.com/birchmd/nearcore/issues/6
+        // TODO justify safety of passing on the mutable `FastGasCounter` pointer, see
+        // https://github.com/birchmd/nearcore/issues/7
+        let gas = self.state.gas_counter.gas_counter_raw_ptr() as *mut wasmer_types::FastGasCounter;
         let instance_config = unsafe {
-            // SAFETY: see Wasmer2VM::run_method
             InstanceConfig::default().with_counter(gas).with_stack_limit(self.stack_limit)
         };
         let instance_artifact = Arc::clone(&self.artifact);
@@ -953,6 +965,13 @@ impl wasmer_vm::Resolver for SubmoduleResolver {
             }
         }
 
+        // Host function called by gas metering injected into WebAssembly, see `VMLogic::gas` and
+        // `near-vm-runner/src/prepare.rs`.
+        unsafe extern "C" fn gas(env: *mut Wasmer2SubmoduleState, opcodes: u32) {
+            // TODO: error handling
+            (*env).gas_counter.pay_wasm_gas(opcodes).unwrap();
+        }
+
         // Host function to get the size of the input buffer (used to know how big of a memory
         // allocation to create for copying the input buffer).
         extern "C" fn get_input_size(env: *mut Wasmer2SubmoduleState) -> i64 {
@@ -991,6 +1010,10 @@ impl wasmer_vm::Resolver for SubmoduleResolver {
                 &[],
             );
             let address = callback as _;
+            (address, signature)
+        } else if field == "gas" {
+            let signature = wasmer_types::FunctionTypeRef::new(&[wasmer_types::Type::I32], &[]);
+            let address = gas as _;
             (address, signature)
         } else if field == "get_input_size" {
             let signature = wasmer_types::FunctionTypeRef::new(&[], &[wasmer_types::Type::I64]);
