@@ -991,15 +991,16 @@ impl wasmer_vm::Resolver for SubmoduleResolver {
             result_len: i64,
             result_ptr: i64,
         ) {
+            let len = u64::try_from(result_len).expect("Result length should be positive");
+            let ptr = u64::try_from(result_ptr).expect("Result pointer should be positive");
             let result = unsafe {
-                let mut buf = Vec::with_capacity(result_len as usize);
                 // TODO: error handling
-                (*env).memory.read_memory(result_ptr as u64, &mut buf).unwrap();
-                buf
+                (*env).memory.view_memory(MemSlice { ptr, len }).unwrap()
             };
+
             let return_buffer = unsafe { &mut (*env).return_buffer };
             return_buffer.clear();
-            for x in result {
+            for &x in result.as_ref().iter() {
                 return_buffer.push(x);
             }
         }
