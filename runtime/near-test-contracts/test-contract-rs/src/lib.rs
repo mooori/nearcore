@@ -170,7 +170,20 @@ extern "C" {
     fn alt_bn128_g1_sum(value_len: u64, value_ptr: u64, register_id: u64);
     #[cfg(feature = "latest_protocol")]
     fn alt_bn128_pairing_check(value_len: u64, value_ptr: u64) -> u64;
+    // #################
+    // # Submodule API #
+    // #################
+    fn start_submodule(key_ptr: u64, key_len: u64, gas_limit: u64, output_register_id: u64) -> u64;
+    fn resume_submodule(
+        key_ptr: u64,
+        key_len: u64,
+        response_ptr: u64,
+        response_len: u64,
+        output_register_id: u64,
+    ) -> u64;
 }
+
+const ONE_TERAGAS: u64 = 1_000_000_000_000;
 
 macro_rules! ext_test {
     ($export_func:ident, $call_ext:expr) => {
@@ -1268,4 +1281,34 @@ pub unsafe fn get_submodule() {
     };
 
     value_return(code.len() as u64, code.as_ptr() as u64);
+}
+
+/// Executes the submodule stored under `key` and returns the value returned by the submodule.
+///
+/// Expects the bytes of `key` as input.
+///
+/// Panics if the submodule yields back to the parent contract.
+#[no_mangle]
+pub unsafe fn execute_submodule_no_resume() {
+    let input_register = 0;
+    let submodule_output_register = 1;
+
+    // Retrieve key from input.
+    input(input_register);
+    let key = vec![0; register_len(input_register) as usize];
+    read_register(input_register, key.as_ptr() as u64);
+
+    // Start the submodule and assert it terminates (no callback).
+    let submodule_exec_status = start_submodule(
+        key.len() as u64,
+        key.as_ptr() as u64,
+        10 * ONE_TERAGAS,
+        submodule_output_register,
+    );
+    assert_eq!(submodule_exec_status, 0, "Submodule should not yield back to parent");
+
+    // Return the value returned by the submodule.
+    let result = vec![0; register_len(submodule_output_register) as usize];
+    read_register(submodule_output_register, result.as_ptr() as u64);
+    value_return(result.len() as u64, result.as_ptr() as u64);
 }
