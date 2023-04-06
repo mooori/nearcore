@@ -947,12 +947,13 @@ impl wasmer_vm::Resolver for SubmoduleResolver {
 
         // Host function to yield the submodule, passing data back to the main contract
         extern "C" fn callback(env: *mut Wasmer2SubmoduleState, yield_len: i64, yield_ptr: i64) {
+            let len = u64::try_from(yield_len).expect("Yield data length should be positive");
+            let ptr = u64::try_from(yield_ptr).expect("Yield data pointer should be positive");
             let yield_value = unsafe {
                 // TODO: charge gas for memory access
-                let mut buf = Vec::with_capacity(yield_len as usize);
                 // TODO: error handling
-                (*env).memory.read_memory(yield_ptr as u64, &mut buf).unwrap();
-                buf
+                // Copying the data since ownership is required for passing it to `suspend` below.
+                (*env).memory.view_memory(MemSlice { ptr, len }).unwrap().into_owned()
             };
             let input = unsafe { (*(*env).yielder.unwrap()).suspend(yield_value) };
             let buf = unsafe { &mut (*env).input_buffer };
