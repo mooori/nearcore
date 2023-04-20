@@ -1312,3 +1312,55 @@ pub unsafe fn execute_submodule_no_resume() {
     read_register(submodule_output_register, result.as_ptr() as u64);
     value_return(result.len() as u64, result.as_ptr() as u64);
 }
+
+/// Executes the submodule stored under `key`, which is supposed to yield back to the parent once.
+///
+/// The bytes of `key` are expected as input parameter.
+///
+/// Concatenates the bytes yielded and returned by the submodule and passes them to `value_return`.
+#[no_mangle]
+pub unsafe fn execute_submodule_with_one_resume() {
+    let input_register = 0;
+    let yield_data_register = 1;
+    let submodule_output_register = 2;
+
+    // Retrieve key from input.
+    input(input_register);
+    let key = get_register_data(input_register);
+
+    // Start the submodule and assert it yields back to parent.
+    let submodule_exec_status = start_submodule(
+        key.len() as u64,
+        key.as_ptr() as u64,
+        20 * ONE_TERAGAS,
+        yield_data_register,
+    );
+    assert_eq!(submodule_exec_status, 1, "Submodule should yield back to parent");
+    let yield_data = get_register_data(yield_data_register);
+
+    // Resume the submodule with empty response.
+    let response: Vec<u8> = Vec::new();
+    let submodule_exec_status = resume_submodule(
+        key.len() as u64,
+        key.as_ptr() as u64,
+        response.len() as u64,
+        response.as_ptr() as u64,
+        submodule_output_register,
+    );
+    assert_eq!(
+        submodule_exec_status, 0,
+        "After yielding once the submodule should finish execution"
+    );
+    let return_data = get_register_data(submodule_output_register);
+
+    let mut result = Vec::new();
+    result.extend(yield_data);
+    result.extend(return_data);
+    value_return(result.len() as u64, result.as_ptr() as u64);
+}
+
+unsafe fn get_register_data(register_id: u64) -> Vec<u8> {
+    let result = vec![0; register_len(register_id) as usize];
+    read_register(register_id, result.as_ptr() as u64);
+    result
+}
