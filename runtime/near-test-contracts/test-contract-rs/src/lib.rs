@@ -1295,8 +1295,7 @@ pub unsafe fn execute_submodule_no_resume() {
 
     // Retrieve key from input.
     input(input_register);
-    let key = vec![0; register_len(input_register) as usize];
-    read_register(input_register, key.as_ptr() as u64);
+    let key = get_register_data(input_register);
 
     // Start the submodule and assert it terminates (no callback).
     let submodule_exec_status = start_submodule(
@@ -1308,8 +1307,7 @@ pub unsafe fn execute_submodule_no_resume() {
     assert_eq!(submodule_exec_status, 0, "Submodule should not yield back to parent");
 
     // Return the value returned by the submodule.
-    let result = vec![0; register_len(submodule_output_register) as usize];
-    read_register(submodule_output_register, result.as_ptr() as u64);
+    let result = get_register_data(submodule_output_register);
     value_return(result.len() as u64, result.as_ptr() as u64);
 }
 
