@@ -205,7 +205,7 @@ pub fn apply_new_chunk(
         ApplyChunkShardContext {
             shard_id,
             last_validator_proposals: chunk_header.prev_validator_proposals(),
-            gas_limit,
+            gas_limit, // changing this affects `gas_limit` of future chunks
             is_new_chunk: true,
             is_first_block_with_chunk_of_version,
         },
