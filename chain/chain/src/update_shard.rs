@@ -1,4 +1,5 @@
 use crate::crypto_hash_timer::CryptoHashTimer;
+use crate::runtime::metrics::APPLYING_CHUNKS_TIME;
 use crate::types::{
     ApplyChunkBlockContext, ApplyChunkResult, ApplyChunkShardContext, ApplyResultForResharding,
     ReshardingResults, RuntimeAdapter, RuntimeStorageConfig, StorageDataSource,
@@ -15,6 +16,7 @@ use near_primitives::sharding::ShardChunkHeader;
 use near_primitives::transaction::SignedTransaction;
 use near_primitives::types::chunk_extra::ChunkExtra;
 use near_primitives::types::{BlockHeight, Gas, StateChangesForResharding, StateRoot};
+use prometheus::core::Collector;
 use std::collections::HashMap;
 
 /// Result of updating a shard for some block when it has a new chunk for this
@@ -189,6 +191,14 @@ pub fn apply_new_chunk(
         source: storage_context.storage_data_source,
         state_patch: storage_context.state_patch,
     };
+    let hist = APPLYING_CHUNKS_TIME.with_label_values(&[&shard_id.to_string()]);
+    let metric_family = hist.collect();
+    let hist_metric = &metric_family[0].get_metric()[0].get_histogram();
+    let bucket = hist_metric.get_bucket().get(6).unwrap();
+    let sample_count = hist_metric.get_sample_count();
+    let upper_bound = bucket.get_upper_bound();
+    assert!((upper_bound - 1.0).abs() < 1e-8, "got the wrong bucket");
+    println!("sample_count={}\tcumulative count: {}", sample_count, bucket.get_cumulative_count());
     match runtime.apply_chunk(
         storage_config,
         apply_reason,

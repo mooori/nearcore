@@ -3886,6 +3886,7 @@ dependencies = [
  "num-rational 0.3.2",
  "once_cell",
  "primitive-types 0.10.1",
+ "prometheus",
  "rand",
  "rand_chacha",
  "rayon",

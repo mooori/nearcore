@@ -59,7 +59,7 @@ use std::sync::Arc;
 use tracing::{debug, error, info, instrument};
 
 pub mod errors;
-mod metrics;
+pub mod metrics;
 pub mod migrations;
 #[cfg(test)]
 mod tests;

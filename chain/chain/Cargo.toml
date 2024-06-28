@@ -22,6 +22,7 @@ itoa.workspace = true
 lru.workspace = true
 num-rational.workspace = true
 once_cell.workspace = true
+prometheus.workspace = true
 rand_chacha.workspace = true
 rand.workspace = true
 rayon.workspace = true
