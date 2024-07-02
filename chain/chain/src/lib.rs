@@ -18,6 +18,7 @@ pub mod crypto_hash_timer;
 mod doomslug;
 pub mod flat_storage_creator;
 mod garbage_collection;
+mod gas_limit_adjustment;
 mod lightclient;
 pub mod metrics;
 pub mod migrations;

@@ -20,8 +20,8 @@ use crate::types::RuntimeAdapter;
 use crate::{byzantine_assert, Chain};
 use crate::{ChainStore, Error};
 
-/// Gas limit cannot be adjusted for more than 0.1% at a time.
-const GAS_LIMIT_ADJUSTMENT_FACTOR: u64 = 1000;
+/// Allow 5% gas limit changes for this experiment.
+pub const GAS_LIMIT_ADJUSTMENT_FACTOR: u64 = 20;
 
 /// Verifies that chunk's proofs in the header match the body.
 pub fn validate_chunk_proofs(
