@@ -4,7 +4,7 @@ pub mod state_dump;
 
 use crate::state_dump::StateDump;
 use indicatif::{ProgressBar, ProgressStyle};
-use near_async::time::Utc;
+use near_chain::chain::get_genesis_congestion_infos;
 use near_chain::types::RuntimeAdapter;
 use near_chain::{Block, Chain, ChainStore};
 use near_chain_configs::Genesis;
@@ -25,6 +25,7 @@ use near_store::genesis::{compute_storage_usage, initialize_genesis_state};
 use near_store::{
     get_account, get_genesis_state_roots, set_access_key, set_account, set_code, Store, TrieUpdate,
 };
+use near_time::Utc;
 use near_vm_runner::logic::ProtocolVersion;
 use near_vm_runner::ContractCode;
 use nearcore::{NearConfig, NightshadeRuntime, NightshadeRuntimeExt};
@@ -212,8 +213,17 @@ impl GenesisBuilder {
 
     fn write_genesis_block(&mut self) -> Result<()> {
         let shard_ids: Vec<_> = self.genesis.config.shard_layout.shard_ids().collect();
+
+        let state_roots = self.roots.values().cloned().collect();
+        let congestion_infos = get_genesis_congestion_infos(
+            self.epoch_manager.as_ref(),
+            self.runtime.as_ref(),
+            &state_roots,
+        )?;
+
         let genesis_chunks = genesis_chunks(
-            self.roots.values().cloned().collect(),
+            state_roots,
+            congestion_infos,
             &shard_ids,
             self.genesis.config.gas_limit,
             self.genesis.config.genesis_height,

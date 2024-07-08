@@ -244,6 +244,26 @@ impl SignedTransaction {
         )
     }
 
+    pub fn deploy_contract(
+        nonce: Nonce,
+        contract_id: &AccountId,
+        code: Vec<u8>,
+        signer: &Signer,
+        block_hash: CryptoHash,
+    ) -> SignedTransaction {
+        let signer_id = contract_id.clone();
+        let receiver_id = contract_id.clone();
+        Self::from_actions(
+            nonce,
+            signer_id,
+            receiver_id,
+            signer,
+            vec![Action::DeployContract(DeployContractAction { code })],
+            block_hash,
+            0,
+        )
+    }
+
     pub fn create_contract(
         nonce: Nonce,
         originator: AccountId,
@@ -468,18 +488,18 @@ impl TestBlockBuilder {
     pub fn new(clock: near_time::Clock, prev: &Block, signer: Arc<ValidatorSigner>) -> Self {
         let mut tree = crate::merkle::PartialMerkleTree::default();
         tree.insert(*prev.hash());
-
+        let next_epoch_id = if prev.header().is_genesis() {
+            EpochId(*prev.hash())
+        } else {
+            *prev.header().next_epoch_id()
+        };
         Self {
             clock,
             prev: prev.clone(),
             signer,
             height: prev.header().height() + 1,
-            epoch_id: prev.header().epoch_id().clone(),
-            next_epoch_id: if prev.header().is_genesis() {
-                EpochId(*prev.hash())
-            } else {
-                prev.header().next_epoch_id().clone()
-            },
+            epoch_id: *prev.header().epoch_id(),
+            next_epoch_id,
             next_bp_hash: *prev.header().next_bp_hash(),
             approvals: vec![],
             block_merkle_root: tree.root(),
@@ -539,7 +559,8 @@ impl TestBlockBuilder {
             self.signer.as_ref(),
             self.next_bp_hash,
             self.block_merkle_root,
-            self.clock.now_utc(),
+            self.clock,
+            None,
         )
     }
 }

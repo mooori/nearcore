@@ -17,7 +17,9 @@ use near_pool::types::TransactionGroupIterator;
 use near_primitives::account::{AccessKey, Account};
 use near_primitives::apply::ApplyChunkReason;
 use near_primitives::checked_feature;
-use near_primitives::congestion_info::{CongestionControl, ExtendedCongestionInfo};
+use near_primitives::congestion_info::{
+    CongestionControl, ExtendedCongestionInfo, RejectTransactionReason, ShardAcceptsTransactions,
+};
 use near_primitives::errors::{InvalidTxError, RuntimeError, StorageError};
 use near_primitives::hash::{hash, CryptoHash};
 use near_primitives::receipt::{DelayedReceiptIndices, Receipt};
@@ -659,12 +661,23 @@ impl RuntimeAdapter for NightshadeRuntime {
                 congestion_info.congestion_info,
                 congestion_info.missed_chunks_count,
             );
-            if !congestion_control.shard_accepts_transactions() {
+            if let ShardAcceptsTransactions::No(reason) =
+                congestion_control.shard_accepts_transactions()
+            {
                 let receiver_shard =
                     self.account_id_to_shard_uid(transaction.transaction.receiver_id(), epoch_id)?;
-                return Ok(Some(InvalidTxError::ShardCongested {
-                    shard_id: receiver_shard.shard_id,
-                }));
+                let shard_id = receiver_shard.shard_id;
+                let err = match reason {
+                    RejectTransactionReason::IncomingCongestion { congestion_level }
+                    | RejectTransactionReason::OutgoingCongestion { congestion_level }
+                    | RejectTransactionReason::MemoryCongestion { congestion_level } => {
+                        InvalidTxError::ShardCongested { shard_id, congestion_level }
+                    }
+                    RejectTransactionReason::MissedChunks { missed_chunks } => {
+                        InvalidTxError::ShardStuck { shard_id, missed_chunks }
+                    }
+                };
+                return Ok(Some(err));
             }
         }
 
@@ -867,7 +880,7 @@ impl RuntimeAdapter for NightshadeRuntime {
                             congestion_info.congestion_info,
                             congestion_info.missed_chunks_count,
                         );
-                        if !congestion_control.shard_accepts_transactions() {
+                        if congestion_control.shard_accepts_transactions().is_no() {
                             tracing::trace!(target: "runtime", tx=?tx.get_hash(), "discarding transaction due to congestion");
                             rejected_due_to_congestion += 1;
                             continue;
@@ -1303,6 +1316,14 @@ impl RuntimeAdapter for NightshadeRuntime {
         }
     }
 
+    fn get_runtime_config(
+        &self,
+        protocol_version: ProtocolVersion,
+    ) -> Result<RuntimeConfig, Error> {
+        let runtime_config = self.runtime_config_store.get_config(protocol_version);
+        Ok(runtime_config.as_ref().clone())
+    }
+
     fn get_protocol_config(&self, epoch_id: &EpochId) -> Result<ProtocolConfig, Error> {
         let protocol_version = self.epoch_manager.get_epoch_protocol_version(epoch_id)?;
         let mut genesis_config = self.genesis_config.clone();
@@ -1458,7 +1479,7 @@ impl node_runtime::adapter::ViewRuntimeAdapter for NightshadeRuntime {
             block_height: height,
             prev_block_hash: *prev_block_hash,
             block_hash: *block_hash,
-            epoch_id: epoch_id.clone(),
+            epoch_id: *epoch_id,
             epoch_height,
             block_timestamp,
             current_protocol_version,

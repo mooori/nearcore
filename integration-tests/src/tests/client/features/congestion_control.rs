@@ -194,7 +194,7 @@ fn test_protocol_upgrade_simple() {
             .expect("chunk header must have congestion info after upgrade");
         let congestion_control = CongestionControl::new(config, congestion_info, 0);
         assert_eq!(congestion_control.congestion_level(), 0.0);
-        assert!(congestion_control.shard_accepts_transactions());
+        assert!(congestion_control.shard_accepts_transactions().is_yes());
     }
 
     let check_congested_protocol_upgrade = false;
@@ -205,7 +205,7 @@ fn head_congestion_control_config(
     env: &TestEnv,
 ) -> near_parameters::config::CongestionControlConfig {
     let block = env.clients[0].chain.get_head_block().unwrap();
-    let runtime_config = env.get_runtime_config(0, block.header().epoch_id().clone());
+    let runtime_config = env.get_runtime_config(0, *block.header().epoch_id());
     runtime_config.congestion_control_config
 }
 
