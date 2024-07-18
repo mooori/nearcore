@@ -18,8 +18,8 @@ const NOOP_CHUNK_APPLY_TIME: f64 = 0.5;
 // TODO doc comments
 const TARGET_CHUNK_APPLY_TIME: f64 = 1.0;
 const THRESHOLD_NOOP: f64 = 0.5;
-const THRESHOLD_INCREASE: f64 = 0.97;
-const THRESHOLD_DECREASE: f64 = 0.94;
+const THRESHOLD_INCREASE: f64 = 0.99;
+const THRESHOLD_DECREASE: f64 = 0.99;
 
 /// Assumes constant load close to what the node can handle. This requirement can be satisfied in
 /// benchmark runs and allows simple logic to determine adjustments. In other scenarios more data
@@ -29,7 +29,7 @@ pub(crate) fn determine_new_gas_limit(
     shard_id: ShardId,
     height: BlockHeight,
 ) -> u64 {
-    if height % GAS_LIMIT_ADJUSTMENT_INTERVAL == 0 {
+    if height % GAS_LIMIT_ADJUSTMENT_INTERVAL != 0 {
         // Avoid too frequent adjustments.
         return gas_limit;
     }
@@ -44,16 +44,24 @@ pub(crate) fn determine_new_gas_limit(
         bucket_noop.get_cumulative_count() as f64 / histogram.get_sample_count() as f64;
     let ratio_within_target =
         bucket.get_cumulative_count() as f64 / histogram.get_sample_count() as f64;
+    println!("ratio noop: {ratio_noop}\tratio_within_target: {ratio_within_target}");
 
     let mut new_gas_limit = gas_limit;
-    if ratio_noop < THRESHOLD_NOOP {
-        // Consider `gas_limit` adjustments only if there are enough high apply chunk times.
+    if ratio_within_target < THRESHOLD_DECREASE {
+        // Too many chunk apply times exceed the target.
+        new_gas_limit = gas_limit - gas_limit / GAS_LIMIT_ADJUSTMENT_FACTOR;
+        println!("decreased gas_limit to {gas_limit}");
+    } else if ratio_noop < THRESHOLD_NOOP {
+        // Require sufficient amount of apply times to be out of noop-teritory for checking
+        // `gas_limit` increas. Otherwise, if apply times are to short, making predictions about
+        // node performance is more tricky.
         if ratio_within_target >= THRESHOLD_INCREASE {
+            // Sufficiently many apply times within target, so let's increas the gas_limit.
             new_gas_limit = gas_limit + gas_limit / GAS_LIMIT_ADJUSTMENT_FACTOR;
-        } else if ratio_within_target <= THRESHOLD_DECREASE {
-            new_gas_limit = gas_limit - gas_limit / GAS_LIMIT_ADJUSTMENT_FACTOR;
+            println!("increased gas_limit to {gas_limit}");
         }
     }
+
     new_gas_limit
 }
 
@@ -63,6 +71,7 @@ fn get_bucket(histogram: &Histogram, upper_bound: f64) -> &Bucket {
     // TODO search buckets instead of using a hardcoded index
     let idx = match upper_bound {
         // The 'magic' indices returned here are based on `try_create_histogram_vec`.
+        x if x.abs() - 0.05 < f64::EPSILON => 2,
         x if x.abs() - 0.5 < f64::EPSILON => 5,
         x if x.abs() - 1.0 < f64::EPSILON => 6,
         x if x.abs() - 1.3 < f64::EPSILON => 7,
