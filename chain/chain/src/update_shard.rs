@@ -1,5 +1,5 @@
 use crate::crypto_hash_timer::CryptoHashTimer;
-use crate::gas_limit_adjustment::determine_new_gas_limit;
+use crate::gas_limit_adjustment::determine_new_gas_limit_2;
 use crate::types::{
     ApplyChunkBlockContext, ApplyChunkResult, ApplyChunkShardContext, ApplyResultForResharding,
     ReshardingResults, RuntimeAdapter, RuntimeStorageConfig, StorageDataSource,
@@ -182,7 +182,6 @@ pub fn apply_new_chunk(
         shard_id)
     .entered();
     let gas_limit = chunk_header.gas_limit();
-    let new_gas_limit = determine_new_gas_limit(gas_limit, shard_id, block.height);
 
     let _timer = CryptoHashTimer::new(Clock::real(), chunk_header.chunk_hash().0);
     let storage_config = RuntimeStorageConfig {
@@ -197,7 +196,7 @@ pub fn apply_new_chunk(
         ApplyChunkShardContext {
             shard_id,
             last_validator_proposals: chunk_header.prev_validator_proposals(),
-            gas_limit: new_gas_limit, // TODO need new_gas_limit here?
+            gas_limit,
             is_new_chunk: true,
             is_first_block_with_chunk_of_version,
         },
@@ -217,8 +216,12 @@ pub fn apply_new_chunk(
             } else {
                 None
             };
+            let delayed_receipt_gas = apply_result
+                .congestion_info
+                .expect("ApplyChunkResult should have congestion_info")
+                .delayed_receipts_gas();
             Ok(NewChunkResult {
-                gas_limit: new_gas_limit,
+                gas_limit: determine_new_gas_limit_2(gas_limit, shard_id, delayed_receipt_gas),
                 shard_uid: shard_context.shard_uid,
                 apply_result,
                 resharding_results: apply_split_result_or_state_changes,

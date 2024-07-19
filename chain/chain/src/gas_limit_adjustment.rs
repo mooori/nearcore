@@ -65,6 +65,40 @@ pub(crate) fn determine_new_gas_limit(
     new_gas_limit
 }
 
+/// Do throttling on caller side.
+pub(crate) fn determine_new_gas_limit_2(
+    gas_limit: u64,
+    shard_id: ShardId,
+    delayed_receipt_gas: u128,
+) -> u64 {
+    let histogram = get_apply_chunk_time_histogram(shard_id);
+    let target_bucket = get_bucket(&histogram, TARGET_CHUNK_APPLY_TIME);
+    // TODO proper conversion to f64
+    let ratio_in_target =
+        target_bucket.get_cumulative_count() as f64 / histogram.get_sample_count() as f64;
+
+    if histogram.get_sample_count() % 50 == 0 {
+        println!("ration_in_target: {ratio_in_target}\tdelayed_receipt_gas: {delayed_receipt_gas}");
+    }
+
+    let mut new_gas_limit = gas_limit;
+    if ratio_in_target < THRESHOLD_DECREASE {
+        // Too many chunk apply times exceed the target.
+        new_gas_limit = gas_limit - gas_limit / GAS_LIMIT_ADJUSTMENT_FACTOR;
+        println!("decreased gas_limit to {gas_limit}");
+    } else if ratio_in_target > THRESHOLD_INCREASE && delayed_receipt_gas > 0 {
+        // Chunk apply times are within the target, but still there are delayed receipts.
+        // Take that as indication that the node could handle more, hence increase gas_limit.
+        //
+        // Looking at ratio_in_target alone is not sufficient. The reason for short short apply
+        // times could be that there are few transactions.
+        new_gas_limit = gas_limit + gas_limit / GAS_LIMIT_ADJUSTMENT_FACTOR;
+        println!("increased gas_limit to {gas_limit}");
+    }
+
+    new_gas_limit
+}
+
 // TODO avoid panics if this should be merged
 fn get_bucket(histogram: &Histogram, upper_bound: f64) -> &Bucket {
     // Get the bucket with matching upper bound.
