@@ -1,3 +1,5 @@
+use std::time::Duration;
+
 use near_primitives::types::{BlockHeight, ShardId};
 use prometheus::core::Collector;
 use prometheus::proto::Bucket;
@@ -17,6 +19,14 @@ pub(crate) const GAS_LIMIT_ADJUSTMENT_INTERVAL: u64 = 10;
 const NOOP_CHUNK_APPLY_TIME: f64 = 0.5;
 // TODO doc comments
 const TARGET_CHUNK_APPLY_TIME: f64 = 1.0;
+/// Increasing the gas limit when it's too close to the target leads to overshooting.
+const TARGET_BACKOFF: f64 = 0.05;
+/// When there are no transactions, chunk apply times will be low regardless of a node's capacity.
+/// Hence, in that case predicting if a node could handle more load is non-trivial.
+///
+/// To have a notion of a node being loaded, we pick an apply time smaller than
+/// TARGET_CHUNK_APPLY_TIME.
+const LOAD_INDICATION_APPLY_TIME: f64 = 0.5;
 const THRESHOLD_NOOP: f64 = 0.5;
 const THRESHOLD_INCREASE: f64 = 0.99;
 const THRESHOLD_DECREASE: f64 = 0.99;
@@ -94,6 +104,32 @@ pub(crate) fn determine_new_gas_limit_2(
         // times could be that there are few transactions.
         new_gas_limit = gas_limit + gas_limit / GAS_LIMIT_ADJUSTMENT_FACTOR;
         println!("increased gas_limit to {gas_limit}");
+    }
+
+    new_gas_limit
+}
+
+pub(crate) fn determine_new_gas_limit_3(
+    gas_limit: u64,
+    delayed_receipt_gas: u128,
+    last_apply_time: Duration,
+) -> u64 {
+    let mut new_gas_limit = gas_limit;
+    let last_apply_secs = last_apply_time.as_secs_f64();
+
+    if last_apply_secs > TARGET_CHUNK_APPLY_TIME {
+        // Apply times above the target are not acceptable, hence reduce `gas_limit`.
+        new_gas_limit = gas_limit - gas_limit / GAS_LIMIT_ADJUSTMENT_FACTOR;
+        println!("decreased gas_limit to {gas_limit}");
+    } else if last_apply_secs > LOAD_INDICATION_APPLY_TIME
+        && last_apply_secs <= TARGET_CHUNK_APPLY_TIME - TARGET_BACKOFF
+    {
+        // Without load it is hard to predict whether the node could handle more.
+        // Therefore we consider increasing `gas_limit` only if there is some load.
+        if delayed_receipt_gas > 0 {
+            new_gas_limit = gas_limit + gas_limit / GAS_LIMIT_ADJUSTMENT_FACTOR;
+            println!("increased gas_limit to {gas_limit}");
+        }
     }
 
     new_gas_limit

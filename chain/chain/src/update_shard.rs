@@ -1,5 +1,5 @@
 use crate::crypto_hash_timer::CryptoHashTimer;
-use crate::gas_limit_adjustment::determine_new_gas_limit_2;
+use crate::gas_limit_adjustment::determine_new_gas_limit_3;
 use crate::types::{
     ApplyChunkBlockContext, ApplyChunkResult, ApplyChunkShardContext, ApplyResultForResharding,
     ReshardingResults, RuntimeAdapter, RuntimeStorageConfig, StorageDataSource,
@@ -17,6 +17,7 @@ use near_primitives::transaction::SignedTransaction;
 use near_primitives::types::chunk_extra::ChunkExtra;
 use near_primitives::types::{BlockHeight, Gas, StateChangesForResharding, StateRoot};
 use std::collections::HashMap;
+use std::time::Instant;
 
 /// Result of updating a shard for some block when it has a new chunk for this
 /// shard.
@@ -185,6 +186,9 @@ pub fn apply_new_chunk(
     let gas_limit = chunk_header.gas_limit();
 
     let _timer = CryptoHashTimer::new(Clock::real(), chunk_header.chunk_hash().0);
+    // A duration for the CryptoHashTimer created above becomes available only after it was dropped.
+    // To avoid changing CryptoHashTimer for BENCHMARKNET purposes, we create a separate timer.
+    let benchmarknet_timer = Clock::real().now();
     let storage_config = RuntimeStorageConfig {
         state_root: chunk_header.prev_state_root(),
         use_flat_storage: true,
@@ -222,7 +226,11 @@ pub fn apply_new_chunk(
                 .expect("ApplyChunkResult should have congestion_info")
                 .delayed_receipts_gas();
             Ok(NewChunkResult {
-                gas_limit: determine_new_gas_limit_2(gas_limit, shard_id, delayed_receipt_gas),
+                gas_limit: determine_new_gas_limit_3(
+                    gas_limit,
+                    delayed_receipt_gas,
+                    benchmarknet_timer.elapsed(),
+                ),
                 shard_uid: shard_context.shard_uid,
                 apply_result,
                 resharding_results: apply_split_result_or_state_changes,
