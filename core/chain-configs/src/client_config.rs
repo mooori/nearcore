@@ -349,6 +349,24 @@ pub struct ChunkDistributionUris {
     pub set: String,
 }
 
+#[derive(serde::Serialize, serde::Deserialize, Debug, Copy, Clone, PartialEq)]
+pub struct GasLimitAdjustmentConfig {
+    /// Override for `GAS_LIMIT_ADJUSTMENT_FACTOR`.
+    pub adjustment_factor_override: u64,
+    /// The maximum chunk apply time considered sustainable, in milliseconds.
+    pub max_chunk_apply_time: u64,
+    /// Increasing the gas limit when chunk apply times are close to the targeted maximum can lead
+    /// to overshooting the target in subsequent blocks.
+    ///
+    /// Measured in milliseconds.
+    pub backoff_time: u64,
+    /// When there is no load it is hard to predict if the node could handle more load. Hence we
+    /// need some notion of measuring load.
+    ///
+    /// Measured in milliseconds.
+    pub load_indication_apply_time: u64,
+}
+
 /// ClientConfig where some fields can be updated at runtime.
 #[derive(Clone, serde::Serialize)]
 pub struct ClientConfig {
@@ -491,6 +509,7 @@ pub struct ClientConfig {
     /// which can cause extra load on the database. This option is not recommended for production use,
     /// as a large number of incoming witnesses could cause denial of service.
     pub save_latest_witnesses: bool,
+    pub gas_limit_adjustment_config: Option<GasLimitAdjustmentConfig>,
 }
 
 impl ClientConfig {
@@ -580,6 +599,7 @@ impl ClientConfig {
             orphan_state_witness_pool_size: default_orphan_state_witness_pool_size(),
             orphan_state_witness_max_size: default_orphan_state_witness_max_size(),
             save_latest_witnesses: false,
+            gas_limit_adjustment_config: None,
         }
     }
 }

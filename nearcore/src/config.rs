@@ -596,6 +596,7 @@ impl NearConfig {
                 orphan_state_witness_pool_size: config.orphan_state_witness_pool_size,
                 orphan_state_witness_max_size: config.orphan_state_witness_max_size,
                 save_latest_witnesses: config.save_latest_witnesses,
+                gas_limit_adjustment_config: None,
             },
             network_config: NetworkConfig::new(
                 config.network,
