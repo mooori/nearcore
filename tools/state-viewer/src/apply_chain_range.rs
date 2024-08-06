@@ -515,6 +515,7 @@ mod test {
             store.clone(),
             &genesis.config,
             epoch_manager.clone(),
+            None,
         );
         let env = TestEnv::builder(&genesis.config)
             .validator_seats(2)
@@ -585,6 +586,7 @@ mod test {
             store.clone(),
             &genesis.config,
             epoch_manager.clone(),
+            None,
         );
         apply_chain_range(
             ApplyRangeMode::Parallel,
@@ -629,6 +631,7 @@ mod test {
             store.clone(),
             &genesis.config,
             epoch_manager.clone(),
+            None,
         );
         let mut file = tempfile::NamedTempFile::new().unwrap();
         apply_chain_range(

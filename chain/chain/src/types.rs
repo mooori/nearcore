@@ -1,5 +1,6 @@
 use borsh::{BorshDeserialize, BorshSerialize};
 use near_async::time::{Duration, Utc};
+use near_chain_configs::GasLimitAdjustmentConfig;
 use near_chain_configs::GenesisConfig;
 use near_chain_configs::MutableConfigValue;
 use near_chain_configs::ProtocolConfig;
@@ -550,6 +551,8 @@ pub trait RuntimeAdapter: Send + Sync {
 
     fn get_runtime_config(&self, protocol_version: ProtocolVersion)
         -> Result<RuntimeConfig, Error>;
+
+    fn get_gas_limit_adjustment_config(&self) -> Option<GasLimitAdjustmentConfig>;
 }
 
 /// The last known / checked height and time when we have processed it.

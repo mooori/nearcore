@@ -654,7 +654,7 @@ impl NightshadeRuntime {
     pub fn from_config(
         home_dir: &Path,
         store: Store,
-        config: &NearConfig,
+        config: &NearConfig, // could pull config values into NightshadeRuntime from here
         epoch_manager: Arc<EpochManagerHandle>,
     ) -> std::io::Result<Arc<NightshadeRuntime>> {
         // TODO (#9989): directly use the new state snapshot config once the migration is done.
@@ -693,6 +693,7 @@ impl NightshadeRuntime {
             config.config.gc.gc_num_epochs_to_keep(),
             TrieConfig::from_store_config(&config.config.store),
             state_snapshot_config,
+            config.client_config.gas_limit_adjustment_config,
         ))
     }
 }

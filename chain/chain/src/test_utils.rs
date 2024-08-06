@@ -63,8 +63,13 @@ pub fn get_chain_with_epoch_length_and_num_shards(
     let chain_genesis = ChainGenesis::new(&genesis.config);
     let epoch_manager = EpochManager::new_arc_handle(store.clone(), &genesis.config);
     let shard_tracker = ShardTracker::new_empty(epoch_manager.clone());
-    let runtime =
-        NightshadeRuntime::test(tempdir.path(), store, &genesis.config, epoch_manager.clone());
+    let runtime = NightshadeRuntime::test(
+        tempdir.path(),
+        store,
+        &genesis.config,
+        epoch_manager.clone(),
+        None,
+    );
     Chain::new(
         clock,
         epoch_manager,
@@ -147,8 +152,13 @@ pub fn setup_with_tx_validity_period(
     initialize_genesis_state(store.clone(), &genesis, Some(tempdir.path()));
     let epoch_manager = EpochManager::new_arc_handle(store.clone(), &genesis.config);
     let shard_tracker = ShardTracker::new_empty(epoch_manager.clone());
-    let runtime =
-        NightshadeRuntime::test(tempdir.path(), store, &genesis.config, epoch_manager.clone());
+    let runtime = NightshadeRuntime::test(
+        tempdir.path(),
+        store,
+        &genesis.config,
+        epoch_manager.clone(),
+        None,
+    );
     let chain = Chain::new(
         clock,
         epoch_manager.clone(),

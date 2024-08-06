@@ -64,6 +64,7 @@ fn setup_network_node(
         node_storage.get_hot_store(),
         &genesis.config,
         epoch_manager.clone(),
+        None,
     );
     let validator_signer = MutableConfigValue::new(
         Some(Arc::new(create_test_signer(account_id.as_str()))),

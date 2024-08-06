@@ -64,6 +64,7 @@ impl TestEnvNightshadeSetupExt for TestEnvBuilder {
                 epoch_manager,
                 runtime_config,
                 state_snapshot_type.clone(),
+                None,
             )
         };
         let dummy_trie_configs = vec![TrieConfig::default(); self.num_clients()];
@@ -101,6 +102,7 @@ impl TestEnvNightshadeSetupExt for TestEnvBuilder {
                 Some(runtime_config_store),
                 trie_config,
                 state_snapshot_type.clone(),
+                None,
             )
         };
         let dummy_runtime_configs =

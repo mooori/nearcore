@@ -2336,6 +2336,7 @@ fn test_validate_chunk_extra() {
         &chunk_extra,
         block1.chunks()[0].height_included(),
         &chunk_header,
+        client.config.gas_limit_adjustment_config.as_ref(),
     )
     .is_ok());
 }

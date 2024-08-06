@@ -39,6 +39,7 @@ fn setup_env(genesis: &Genesis) -> TestEnv {
         store.clone(),
         &genesis.config,
         epoch_manager.clone(),
+        None,
     );
     TestEnv::builder(&genesis.config)
         .stores(vec![store])

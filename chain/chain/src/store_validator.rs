@@ -406,6 +406,7 @@ mod tests {
             store.clone(),
             &genesis.config,
             epoch_manager.clone(),
+            None,
         );
         let chain_genesis = ChainGenesis::new(&genesis.config);
         let chain = Chain::new(

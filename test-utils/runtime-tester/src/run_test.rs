@@ -67,6 +67,7 @@ impl Scenario {
             epoch_manager.clone(),
             runtime_config_store,
             StateSnapshotType::ForReshardingOnly,
+            None,
         );
 
         let mut env = TestEnv::builder(&genesis.config)

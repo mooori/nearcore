@@ -27,7 +27,7 @@ fn genesis_header(genesis: &Genesis) -> BlockHeader {
     let epoch_manager = EpochManager::new_arc_handle(store.clone(), &genesis.config);
     let shard_tracker = ShardTracker::new_empty(epoch_manager.clone());
     let runtime =
-        NightshadeRuntime::test(dir.path(), store, &genesis.config, epoch_manager.clone());
+        NightshadeRuntime::test(dir.path(), store, &genesis.config, epoch_manager.clone(), None);
     let chain = Chain::new(
         Clock::real(),
         epoch_manager,
@@ -53,7 +53,7 @@ pub fn genesis_block(genesis: &Genesis) -> Block {
     let epoch_manager = EpochManager::new_arc_handle(store.clone(), &genesis.config);
     let shard_tracker = ShardTracker::new_empty(epoch_manager.clone());
     let runtime =
-        NightshadeRuntime::test(dir.path(), store, &genesis.config, epoch_manager.clone());
+        NightshadeRuntime::test(dir.path(), store, &genesis.config, epoch_manager.clone(), None);
     let chain = Chain::new(
         Clock::real(),
         epoch_manager,

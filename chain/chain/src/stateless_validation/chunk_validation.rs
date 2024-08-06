@@ -497,6 +497,7 @@ pub fn validate_chunk_state_witness(
         &chunk_extra,
         &state_witness.chunk_header,
         &outgoing_receipts_root,
+        runtime_adapter.get_gas_limit_adjustment_config().as_ref(),
     )?;
 
     Ok(())

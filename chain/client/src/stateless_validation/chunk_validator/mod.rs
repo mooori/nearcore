@@ -129,6 +129,7 @@ impl ChunkValidator {
                 &prev_chunk_extra,
                 last_header.height_included(),
                 &chunk_header,
+                chain.runtime_adapter.get_gas_limit_adjustment_config().as_ref(),
             ) {
                 Ok(()) => {
                     send_chunk_endorsement_to_block_producers(

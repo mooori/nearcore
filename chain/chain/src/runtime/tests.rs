@@ -137,6 +137,7 @@ impl TestEnv {
                 hot_store_path: PathBuf::from("data"),
                 state_snapshot_subdir: PathBuf::from("state_snapshot"),
             },
+            None, // TODO enable passing in an actual GasLimitAdjustmentConfig?
         );
         let state_roots = get_genesis_state_roots(&store).unwrap().unwrap();
         let genesis_hash = hash(&[0]);
@@ -1530,6 +1531,7 @@ fn test_genesis_hash() {
         epoch_manager.clone(),
         RuntimeConfigStore::new(None),
         StateSnapshotType::EveryEpoch,
+        None,
     );
 
     let state_roots =

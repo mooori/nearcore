@@ -5,7 +5,7 @@ use near_chain::chain::{
 };
 use near_chain::migrations::check_if_block_is_first_with_chunk_of_version;
 use near_chain::stateless_validation::chunk_endorsement::validate_chunk_endorsements_in_block;
-use near_chain::types::{ApplyChunkResult, StorageDataSource};
+use near_chain::types::{ApplyChunkResult, RuntimeAdapter, StorageDataSource};
 use near_chain::update_shard::{process_shard_update, ShardUpdateReason, ShardUpdateResult};
 use near_chain::validate::{
     validate_chunk_proofs, validate_chunk_with_chunk_extra, validate_transactions_order,
@@ -257,6 +257,7 @@ impl ReplayController {
                 prev_chunk_extra.as_ref(),
                 prev_chunk_height_included,
                 chunk_header,
+                self.runtime.get_gas_limit_adjustment_config().as_ref(),
             )
             .context("Failed to validate chunk with chunk extra")?;
 

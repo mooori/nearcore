@@ -72,6 +72,7 @@ fn test_client_with_simple_test_loop() {
         store.clone(),
         &genesis.config,
         epoch_manager.clone(),
+        None,
     );
     let validator_signer = MutableConfigValue::new(
         Some(Arc::new(create_test_signer(accounts[0].as_str()))),

@@ -1478,6 +1478,12 @@ impl RuntimeAdapter for KeyValueRuntime {
         Ok(RuntimeConfig::test())
     }
 
+    fn get_gas_limit_adjustment_config(
+        &self,
+    ) -> Option<near_chain_configs::GasLimitAdjustmentConfig> {
+        None
+    }
+
     fn will_shard_layout_change_next_epoch(
         &self,
         _parent_hash: &CryptoHash,

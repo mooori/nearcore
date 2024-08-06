@@ -427,8 +427,13 @@ mod test {
             last_block.chunks().iter().map(|chunk| chunk.prev_state_root()).collect();
         initialize_genesis_state(store.clone(), &genesis, None);
         let epoch_manager = EpochManager::new_arc_handle(store.clone(), &genesis.config);
-        let runtime =
-            NightshadeRuntime::test(Path::new("."), store, &genesis.config, epoch_manager.clone());
+        let runtime = NightshadeRuntime::test(
+            Path::new("."),
+            store,
+            &genesis.config,
+            epoch_manager.clone(),
+            near_config.client_config.gas_limit_adjustment_config,
+        );
         let records_file = tempfile::NamedTempFile::new().unwrap();
         let new_near_config = state_dump(
             epoch_manager.as_ref(),
@@ -505,8 +510,13 @@ mod test {
             last_block.chunks().iter().map(|chunk| chunk.prev_state_root()).collect();
         initialize_genesis_state(store.clone(), &genesis, None);
         let epoch_manager = EpochManager::new_arc_handle(store.clone(), &genesis.config);
-        let runtime =
-            NightshadeRuntime::test(Path::new("."), store, &genesis.config, epoch_manager.clone());
+        let runtime = NightshadeRuntime::test(
+            Path::new("."),
+            store,
+            &genesis.config,
+            epoch_manager.clone(),
+            near_config.client_config.gas_limit_adjustment_config,
+        );
         let select_account_ids = vec!["test0".parse().unwrap()];
         let new_near_config = state_dump(
             epoch_manager.as_ref(),
@@ -569,8 +579,13 @@ mod test {
             last_block.chunks().iter().map(|chunk| chunk.prev_state_root()).collect();
         initialize_genesis_state(store.clone(), &genesis, None);
         let epoch_manager = EpochManager::new_arc_handle(store.clone(), &genesis.config);
-        let runtime =
-            NightshadeRuntime::test(Path::new("."), store, &genesis.config, epoch_manager.clone());
+        let runtime = NightshadeRuntime::test(
+            Path::new("."),
+            store,
+            &genesis.config,
+            epoch_manager.clone(),
+            near_config.client_config.gas_limit_adjustment_config,
+        );
         let new_near_config = state_dump(
             epoch_manager.as_ref(),
             runtime,
@@ -612,8 +627,13 @@ mod test {
             last_block.chunks().iter().map(|chunk| chunk.prev_state_root()).collect();
         initialize_genesis_state(store.clone(), &genesis, None);
         let epoch_manager = EpochManager::new_arc_handle(store.clone(), &genesis.config);
-        let runtime =
-            NightshadeRuntime::test(Path::new("."), store, &genesis.config, epoch_manager.clone());
+        let runtime = NightshadeRuntime::test(
+            Path::new("."),
+            store,
+            &genesis.config,
+            epoch_manager.clone(),
+            near_config.client_config.gas_limit_adjustment_config,
+        );
 
         let records_file = tempfile::NamedTempFile::new().unwrap();
         let new_near_config = state_dump(
@@ -667,8 +687,13 @@ mod test {
             last_block.chunks().iter().map(|chunk| chunk.prev_state_root()).collect();
         initialize_genesis_state(store.clone(), &genesis, None);
         let epoch_manager = EpochManager::new_arc_handle(store.clone(), &genesis.config);
-        let runtime =
-            NightshadeRuntime::test(Path::new("."), store, &genesis.config, epoch_manager.clone());
+        let runtime = NightshadeRuntime::test(
+            Path::new("."),
+            store,
+            &genesis.config,
+            epoch_manager.clone(),
+            near_config.client_config.gas_limit_adjustment_config,
+        );
         let records_file = tempfile::NamedTempFile::new().unwrap();
         let new_near_config = state_dump(
             epoch_manager.as_ref(),
@@ -707,12 +732,14 @@ mod test {
             store1.clone(),
             &genesis.config,
             epoch_manager1.clone(),
+            None,
         );
         let runtime2 = NightshadeRuntime::test(
             Path::new("."),
             store2.clone(),
             &genesis.config,
             epoch_manager2.clone(),
+            None,
         );
         let mut env = TestEnv::builder(&genesis.config)
             .clients_count(2)
@@ -792,6 +819,7 @@ mod test {
             store.clone(),
             &genesis.config,
             epoch_manager.clone(),
+            None,
         );
         let mut env = TestEnv::builder(&genesis.config)
             .validator_seats(2)
@@ -847,8 +875,13 @@ mod test {
             last_block.chunks().iter().map(|chunk| chunk.prev_state_root()).collect();
         initialize_genesis_state(store.clone(), &genesis, None);
         let epoch_manager = EpochManager::new_arc_handle(store.clone(), &genesis.config);
-        let runtime =
-            NightshadeRuntime::test(Path::new("."), store, &genesis.config, epoch_manager.clone());
+        let runtime = NightshadeRuntime::test(
+            Path::new("."),
+            store,
+            &genesis.config,
+            epoch_manager.clone(),
+            near_config.client_config.gas_limit_adjustment_config,
+        );
         let records_file = tempfile::NamedTempFile::new().unwrap();
         let new_near_config = state_dump(
             epoch_manager.as_ref(),
@@ -905,8 +938,13 @@ mod test {
             last_block.chunks().iter().map(|chunk| chunk.prev_state_root()).collect();
         initialize_genesis_state(store.clone(), &genesis, None);
         let epoch_manager = EpochManager::new_arc_handle(store.clone(), &genesis.config);
-        let runtime =
-            NightshadeRuntime::test(Path::new("."), store, &genesis.config, epoch_manager.clone());
+        let runtime = NightshadeRuntime::test(
+            Path::new("."),
+            store,
+            &genesis.config,
+            epoch_manager.clone(),
+            near_config.client_config.gas_limit_adjustment_config,
+        );
         let new_near_config = state_dump(
             epoch_manager.as_ref(),
             runtime,

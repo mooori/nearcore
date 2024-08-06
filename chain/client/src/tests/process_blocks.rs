@@ -246,6 +246,7 @@ fn test_bad_congestion_info_impl(mode: BadCongestionInfoMode) {
         &prev_chunk_extra,
         1,
         &modified_chunk,
+        client.config.gas_limit_adjustment_config.as_ref(),
     );
 
     let expected_is_ok = mode.is_ok();

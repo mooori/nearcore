@@ -525,6 +525,7 @@ mod test {
             store.clone(),
             &genesis.config,
             epoch_manager.clone(),
+            None,
         );
 
         let signers = (0..4)
@@ -610,6 +611,7 @@ mod test {
             store.clone(),
             &genesis.config,
             epoch_manager.clone(),
+            None,
         );
 
         let signers = (0..4)

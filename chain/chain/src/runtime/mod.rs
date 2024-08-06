@@ -8,7 +8,8 @@ use borsh::BorshDeserialize;
 use errors::FromStateViewerErrors;
 use near_async::time::{Duration, Instant};
 use near_chain_configs::{
-    GenesisConfig, ProtocolConfig, DEFAULT_GC_NUM_EPOCHS_TO_KEEP, MIN_GC_NUM_EPOCHS_TO_KEEP,
+    GasLimitAdjustmentConfig, GenesisConfig, ProtocolConfig, DEFAULT_GC_NUM_EPOCHS_TO_KEEP,
+    MIN_GC_NUM_EPOCHS_TO_KEEP,
 };
 use near_crypto::PublicKey;
 use near_epoch_manager::{EpochManagerAdapter, EpochManagerHandle};
@@ -79,6 +80,7 @@ pub struct NightshadeRuntime {
     epoch_manager: Arc<EpochManagerHandle>,
     migration_data: Arc<MigrationData>,
     gc_num_epochs_to_keep: u64,
+    gas_limit_adjustment_config: Option<GasLimitAdjustmentConfig>,
 }
 
 impl NightshadeRuntime {
@@ -93,6 +95,7 @@ impl NightshadeRuntime {
         gc_num_epochs_to_keep: u64,
         trie_config: TrieConfig,
         state_snapshot_config: StateSnapshotConfig,
+        gas_limit_adjustment_config: Option<GasLimitAdjustmentConfig>,
     ) -> Arc<Self> {
         let runtime_config_store = match runtime_config_store {
             Some(store) => store,
@@ -131,6 +134,7 @@ impl NightshadeRuntime {
             epoch_manager,
             migration_data,
             gc_num_epochs_to_keep: gc_num_epochs_to_keep.max(MIN_GC_NUM_EPOCHS_TO_KEEP),
+            gas_limit_adjustment_config,
         })
     }
 
@@ -142,6 +146,7 @@ impl NightshadeRuntime {
         epoch_manager: Arc<EpochManagerHandle>,
         runtime_config_store: RuntimeConfigStore,
         state_snapshot_type: StateSnapshotType,
+        gas_limit_adjustment_config: Option<GasLimitAdjustmentConfig>,
     ) -> Arc<Self> {
         Self::new(
             store,
@@ -159,6 +164,7 @@ impl NightshadeRuntime {
                 hot_store_path: PathBuf::from("data"),
                 state_snapshot_subdir: PathBuf::from("state_snapshot"),
             },
+            gas_limit_adjustment_config,
         )
     }
 
@@ -171,6 +177,7 @@ impl NightshadeRuntime {
         runtime_config_store: Option<RuntimeConfigStore>,
         trie_config: TrieConfig,
         state_snapshot_type: StateSnapshotType,
+        gas_limit_adjustment_config: Option<GasLimitAdjustmentConfig>,
     ) -> Arc<Self> {
         Self::new(
             store,
@@ -188,6 +195,7 @@ impl NightshadeRuntime {
                 hot_store_path: PathBuf::from("data"),
                 state_snapshot_subdir: PathBuf::from("state_snapshot"),
             },
+            gas_limit_adjustment_config,
         )
     }
 
@@ -196,6 +204,7 @@ impl NightshadeRuntime {
         store: Store,
         genesis_config: &GenesisConfig,
         epoch_manager: Arc<EpochManagerHandle>,
+        gas_limit_adjustment_config: Option<GasLimitAdjustmentConfig>,
     ) -> Arc<Self> {
         Self::test_with_runtime_config_store(
             home_dir,
@@ -207,6 +216,7 @@ impl NightshadeRuntime {
             epoch_manager,
             RuntimeConfigStore::test(),
             StateSnapshotType::ForReshardingOnly,
+            gas_limit_adjustment_config,
         )
     }
 
@@ -1373,6 +1383,10 @@ impl RuntimeAdapter for NightshadeRuntime {
         let runtime_config =
             self.runtime_config_store.get_config(protocol_version).as_ref().clone();
         Ok(ProtocolConfig { genesis_config, runtime_config })
+    }
+
+    fn get_gas_limit_adjustment_config(&self) -> Option<GasLimitAdjustmentConfig> {
+        self.gas_limit_adjustment_config
     }
 
     fn will_shard_layout_change_next_epoch(&self, parent_hash: &CryptoHash) -> Result<bool, Error> {

@@ -236,6 +236,7 @@ impl TestLoopBuilder {
             None,
             TrieConfig::from_store_config(&store_config),
             StateSnapshotType::EveryEpoch,
+            None,
         );
 
         let state_snapshot = StateSnapshotActor::new(
@@ -332,6 +333,7 @@ impl TestLoopBuilder {
                     None,
                     TrieConfig::from_store_config(&store_config),
                     StateSnapshotType::EveryEpoch,
+                    None,
                 );
                 (view_epoch_manager, view_shard_tracker, view_runtime_adapter)
             } else {

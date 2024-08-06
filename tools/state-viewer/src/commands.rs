@@ -1553,6 +1553,7 @@ mod tests {
             store.clone(),
             &genesis.config,
             epoch_manager.clone(),
+            None,
         ) as Arc<dyn RuntimeAdapter>;
 
         let stores = vec![store.clone()];

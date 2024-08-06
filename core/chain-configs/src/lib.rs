@@ -21,9 +21,9 @@ pub use client_config::{
     default_trie_viewer_state_size_limit, default_tx_routing_height_horizon,
     default_view_client_threads, default_view_client_throttle_period,
     ChunkDistributionNetworkConfig, ChunkDistributionUris, ClientConfig, DumpConfig,
-    ExternalStorageConfig, ExternalStorageLocation, GCConfig, LogSummaryStyle, ReshardingConfig,
-    ReshardingHandle, StateSyncConfig, SyncConfig, DEFAULT_GC_NUM_EPOCHS_TO_KEEP,
-    DEFAULT_STATE_SYNC_NUM_CONCURRENT_REQUESTS_EXTERNAL,
+    ExternalStorageConfig, ExternalStorageLocation, GCConfig, GasLimitAdjustmentConfig,
+    LogSummaryStyle, ReshardingConfig, ReshardingHandle, StateSyncConfig, SyncConfig,
+    DEFAULT_GC_NUM_EPOCHS_TO_KEEP, DEFAULT_STATE_SYNC_NUM_CONCURRENT_REQUESTS_EXTERNAL,
     DEFAULT_STATE_SYNC_NUM_CONCURRENT_REQUESTS_ON_CATCHUP_EXTERNAL, MIN_GC_NUM_EPOCHS_TO_KEEP,
     TEST_STATE_SYNC_TIMEOUT,
 };
