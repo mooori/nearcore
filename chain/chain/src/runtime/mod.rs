@@ -46,9 +46,10 @@ use near_store::{
 use near_vm_runner::ContractCode;
 use near_vm_runner::{ContractRuntimeCache, precompile_contract};
 use node_runtime::adapter::ViewRuntimeAdapter;
+use node_runtime::config::TransactionCost;
 use node_runtime::state_viewer::{TrieViewer, ViewApplyState};
 use node_runtime::{
-    ApplyState, Runtime, ValidatorAccountsUpdate, validate_transaction,
+    ApplyState, Runtime, ValidatorAccountsUpdate, VerificationResult, validate_transaction,
     verify_and_charge_transaction,
 };
 use std::collections::HashMap;
@@ -697,6 +698,7 @@ impl RuntimeAdapter for NightshadeRuntime {
         let mut rejected_invalid_for_chain = 0;
 
         // Add new transactions to the result until some limit is hit or the transactions run out.
+        let mut loop_counter = 0;
         'add_txs_loop: while let Some(transaction_group_iter) = transaction_groups.next() {
             if total_gas_burnt >= transactions_gas_limit {
                 result.limited_by = Some(PrepareTransactionsLimit::Gas);
@@ -775,23 +777,62 @@ impl RuntimeAdapter for NightshadeRuntime {
                     continue;
                 }
 
-                let verify_result = validate_transaction(
-                    runtime_config,
-                    prev_block.next_gas_price,
-                    &tx,
-                    true,
-                    protocol_version,
-                )
-                .and_then(|cost| {
-                    verify_and_charge_transaction(
-                        runtime_config,
-                        &mut state_update,
-                        &tx,
-                        &cost,
-                        Some(next_block_height),
-                        protocol_version,
-                    )
-                });
+                loop_counter += 1;
+                let (a, b) = rayon::join(
+                    || {
+                        validate_transaction(
+                            runtime_config,
+                            prev_block.next_gas_price,
+                            &tx,
+                            true,
+                            protocol_version,
+                        )
+                    },
+                    || {
+                        // The `dummy_cost` parameter is never used in verify_and_charge_transaction
+                        // It's values are only repacked into another struct and then returned.
+                        // So okay to pass in a dummy value as long as it's not used later on.
+                        let dummy_cost = TransactionCost {
+                            gas_burnt: 0,
+                            gas_remaining: 0,
+                            receipt_gas_price: 0,
+                            total_cost: 0,
+                            burnt_amount: 0,
+                        };
+                        verify_and_charge_transaction(
+                            runtime_config,
+                            &mut state_update,
+                            &tx,
+                            &dummy_cost,
+                            Some(next_block_height),
+                            protocol_version,
+                        )
+                    },
+                );
+                let verify_result = if let Err(err) = a {
+                    // In the old flow, if validate_transaction results in an error,
+                    // that error is returned.
+                    Err(err)
+                } else if b.is_err() {
+                    // Same for verify_and_charge_transaction
+                    b
+                } else {
+                    // Originally, the cost passed into verify_and_charge_transaction will be
+                    // returned. Reconstruct that behavior.
+                    let TransactionCost {
+                        gas_burnt,
+                        gas_remaining,
+                        receipt_gas_price,
+                        burnt_amount,
+                        ..
+                    } = a.unwrap();
+                    Ok(VerificationResult {
+                        gas_burnt,
+                        gas_remaining,
+                        receipt_gas_price,
+                        burnt_amount,
+                    })
+                };
 
                 match verify_result {
                     Ok(cost) => {
@@ -811,6 +852,10 @@ impl RuntimeAdapter for NightshadeRuntime {
                 }
             }
         }
+        println!(
+            "checked {loop_counter} txs in {} ms using rayon",
+            start_time.elapsed().as_millis()
+        );
         debug!(target: "runtime", limited_by=?result.limited_by, "Transaction filtering results {} valid out of {} pulled from the pool", result.transactions.len(), num_checked_transactions);
         let shard_label = shard_id.to_string();
         metrics::PREPARE_TX_SIZE.with_label_values(&[&shard_label]).observe(total_size as f64);
