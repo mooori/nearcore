@@ -149,14 +149,20 @@ pub fn verify_and_charge_transaction(
     let transaction = &signed_transaction.transaction;
     let signer_id = transaction.signer_id();
 
-    let mut signer = match get_account(state_update, signer_id)? {
+    let immutable_state_update: &_ = state_update;
+    let (maybe_signer, maybe_access_key) = rayon::join(
+        || get_account(immutable_state_update, signer_id),
+        || get_access_key(immutable_state_update, signer_id, transaction.public_key()),
+    );
+
+    let mut signer = match maybe_signer? {
         Some(signer) => signer,
         None => {
             return Err(InvalidTxError::SignerDoesNotExist { signer_id: signer_id.clone() });
         }
     };
 
-    let mut access_key = match get_access_key(state_update, signer_id, transaction.public_key())? {
+    let mut access_key = match maybe_access_key? {
         Some(access_key) => access_key,
         None => {
             return Err(InvalidTxError::InvalidAccessKeyError(
